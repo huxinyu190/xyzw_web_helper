@@ -53,7 +53,12 @@
       </div>
 
       <div class="resources" :class="{ collapsed: !isExpanded }" v-if="hasRole">
-        <div v-for="res in resList" :key="res.label" class="res-item">
+        <div
+          v-for="res in resList"
+          :key="res.label"
+          class="res-item"
+          :title="res.hint || ''"
+        >
           <span class="label">{{ res.label }}</span>
           <span class="value">{{ res.value }}</span>
         </div>
@@ -136,8 +141,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { bookStarOverride } from "@/composables/useBookStar";
 import { useTokenStore } from "@/stores/tokenStore";
 import { legacycolor as rawLegacyColor } from "@/utils/HeroList";
+import { BOOK_SCOPE_HINT, resolveBookInfo } from "@/utils/roleBook";
 
 defineProps<{ visible?: boolean; embedded?: boolean }>();
 
@@ -375,8 +382,22 @@ const display = (n: number | null | undefined) =>
   n == null ? "-" : formatNumber(Number(n));
 const getRawValue = (n: number | null | undefined) =>
   n == null ? 0 : Number(n);
+
+// 图鉴微星：优先取自动解析结果，其次用手动填写值（见 utils/roleBook.js）
+const bookInfo = computed(() =>
+  resolveBookInfo(
+    (tokenStore.gameData as any)?.roleInfo?.role,
+    bookStarOverride.value,
+  ),
+);
+const bookResource = computed(() => ({
+  label: bookInfo.value.label || "图鉴微星",
+  value: display(bookInfo.value.count),
+  raw: getRawValue(bookInfo.value.count),
+  hint: BOOK_SCOPE_HINT[bookInfo.value.scope] || "图鉴微星",
+}));
 const resList = computed(() => {
-  const allResources = [
+  const allResources: Array<Record<string, any>> = [
     { label: "金币", value: formatNumber(gold.value), raw: gold.value },
     { label: "金砖", value: formatNumber(diamond.value), raw: diamond.value },
     {
@@ -615,8 +636,8 @@ const resList = computed(() => {
   const nonZero = allResources.filter((res) => res.raw > 0);
   const zero = allResources.filter((res) => res.raw === 0);
 
-  // 非零资源在前，零资源在后
-  return [...nonZero, ...zero];
+  // 非零资源在前，零资源在后，图鉴数固定在最后一项
+  return [...nonZero, ...zero, bookResource.value];
 });
 
 const showExpand = computed(() => resList.value.length > 6);

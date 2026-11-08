@@ -33,6 +33,7 @@
       <n-tab-pane name="peachGroup" tab="蟠桃园" />
       <n-tab-pane name="rankGroup" tab="排行榜" />
       <n-tab-pane name="fightPvp" tab="切磋" />
+      <n-tab-pane name="goldFish" tab="金鱼活动" />
     </n-tabs>
 
     <!-- 阵容（仅日常） -->
@@ -362,6 +363,9 @@
     </div>
     <!-- 切磋（提取组件） -->
     <FightPvp v-if="activeSection === 'fightPvp'" />
+
+    <!-- 金鱼活动（消耗活动拿金鱼目标规划） -->
+    <GoldFishActivity v-show="activeSection === 'goldFish'" />
   </div>
 </template>
 
@@ -402,6 +406,7 @@ import LegionWarStatistics from "./Club/LegionWarStatistics.vue";
 import PeachBattleRecords from "./Club/PeachBattleRecords.vue";
 import PeachInfo from "./Club/PeachInfo.vue";
 import PeachInfoV2 from "./Club/PeachInfoV2.vue";
+import GoldFishActivity from "./GoldFish/GoldFishActivity.vue";
 import BossTower from "./Tower/BossTower.vue";
 import TowerStatus from "./Tower/TowerStatus.vue";
 import WeirdTowerStatus from "./Tower/WeirdTowerStatus.vue";
