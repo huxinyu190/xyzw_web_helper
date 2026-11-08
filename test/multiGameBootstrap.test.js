@@ -101,7 +101,12 @@ test("multi-game bootstrap gates every game runtime behind the storage bridge", 
   const staticScriptSources = [
     ...multiGameHtml.matchAll(/<script\s+src="([^"]+)"/g),
   ].map((match) => match[1]);
-  assert.deepEqual(staticScriptSources, ["multi-game-storage-bridge.js"]);
+  // xyzw-sound.js 只读取声音开关，不属于游戏 runtime；游戏 runtime 仍必须由
+  // 下方 bootstrap 在 storage bridge 就绪后动态加载。
+  assert.deepEqual(staticScriptSources, [
+    "xyzw-sound.js",
+    "multi-game-storage-bridge.js",
+  ]);
 
   for (const runtimeFile of expectedRuntimeFiles) {
     assert.ok(multiGameHtml.includes(`"${runtimeFile}"`), runtimeFile);

@@ -100,6 +100,58 @@ function storageKeys(storage) {
   return keys;
 }
 
+/**
+ * 多开时 game/multi-game.html 会把 localStorage 按账号隔离，游戏自身保存的
+ * 设置（音乐/音效/震动/点击特效、自动进入省电模式、画质、帧率）在隔离空间里
+ * 是默认值，于是出现“单开设置已关、批量打开却还有点击音效”的差异。
+ *
+ * 这里把单开（全局）里的偏好设置复制进每个账号的隔离空间，让批量打开的游戏
+ * 读到和单开完全一致的那份设置。
+ *
+ * 不复制的东西：账号 BIN、当前账号指针，以及主站的登录态/密钥类数据 ——
+ * 游戏 iframe 只需要自己的设置项，不该拿到这些。
+ */
+const SHARED_STORAGE_BLOCKLIST = [
+  /^multi-game:/,
+  /^bin_data_/,
+  /^bin_file_list$/,
+  /^current_bin_id$/,
+  /^actual_login_bin_id$/,
+  // 主站登录态 / 角色数据（精确匹配，避免误伤 userSetting 这类游戏设置键）
+  /^token$/i,
+  /^tokenSortConfig$/,
+  /^tokenViewMode$/,
+  /^user$/i,
+  /^userId$/i,
+  /^userInfo$/i,
+  /^userData$/i,
+  /^(gameRoles|registeredUsers|selectedRole|selectedTokenId)$/,
+  /^ws_/,
+  /api[-_]?key|secret|password|credential|authorization/i,
+  /^xyzw:(gameSound|gamePerf)$/,
+];
+
+/** 只同步小体积键值，避免把 BIN / 大缓存复制 N 份 */
+const SHARED_STORAGE_MAX_LENGTH = 8192;
+
+export function collectSharedGamePreferences(storage) {
+  const entries = [];
+  if (!storage) return entries;
+  for (const key of storageKeys(storage)) {
+    if (SHARED_STORAGE_BLOCKLIST.some((pattern) => pattern.test(key))) continue;
+    let value;
+    try {
+      value = storage.getItem(key);
+    } catch {
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    if (value.length > SHARED_STORAGE_MAX_LENGTH) continue;
+    entries.push([key, value]);
+  }
+  return entries;
+}
+
 function isSession(value) {
   return Boolean(
     value &&
@@ -329,6 +381,8 @@ export async function prepareMultiGameLaunch({
   const sessions = [];
   const failures = [];
   const localEntries = [];
+  // 单开时游戏读的是全局设置，批量打开要继承同一份（声音四项、省电、帧率等）
+  const sharedPreferences = collectSharedGamePreferences(localStorage);
   for (const result of prepared) {
     if (result.failure) {
       failures.push(result.failure);
@@ -359,6 +413,9 @@ export async function prepareMultiGameLaunch({
         ]),
       ],
     );
+    for (const [key, value] of sharedPreferences) {
+      localEntries.push([`${prefix}${key}`, value]);
+    }
     sessions.push({ tokenId: result.token.id, name, scopeId, order });
   }
 

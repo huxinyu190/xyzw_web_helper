@@ -223,6 +223,56 @@ test("prepareMultiGameLaunch seeds isolated accounts in display order and record
   );
 });
 
+test("prepareMultiGameLaunch carries game preferences into every scope", async () => {
+  assert.equal(typeof launcher.collectSharedGamePreferences, "function");
+  const local = new MemoryStorage();
+  const session = new MemoryStorage();
+  const settings = JSON.stringify({
+    music: false,
+    effect: false,
+    vibrate: false,
+    clickEffect: false,
+    powerSave: 0,
+    fps: 60,
+  });
+  local.setItem("setting", settings);
+  local.setItem("userSetting", settings);
+  local.setItem("token", "secret-token");
+  local.setItem("userId", "123");
+  local.setItem("bin_data_other", "706c");
+  local.setItem("bin_file_list", "[]");
+  local.setItem("current_bin_id", "other");
+  local.setItem("big_cache", "x".repeat(9000));
+
+  assert.deepEqual(launcher.collectSharedGamePreferences(local), [
+    ["setting", settings],
+    ["userSetting", settings],
+  ]);
+
+  const result = await launcher.prepareMultiGameLaunch({
+    tokens: [{ id: "a", name: "账号 A" }],
+    getArrayBuffer: async () => Uint8Array.from([112, 108, 1, 2, 3]).buffer,
+    localStorage: local,
+    sessionStorage: session,
+    randomUUID: () => "11111111-1111-1111-1111-111111111111",
+    now: () => 1_788_343_200_000,
+  });
+
+  assert.equal(result.launch.sessions.length, 1);
+  const prefix = "multi-game:mg-11111111111111111111111111111111:";
+  // 游戏设置随账号继承，批量打开与单开表现一致
+  assert.equal(local.getItem(`${prefix}setting`), settings);
+  assert.equal(local.getItem(`${prefix}userSetting`), settings);
+  // 登录态、账号 BIN、大缓存不跟着复制
+  assert.equal(local.getItem(`${prefix}token`), null);
+  assert.equal(local.getItem(`${prefix}userId`), null);
+  assert.equal(local.getItem(`${prefix}bin_data_other`), null);
+  assert.equal(local.getItem(`${prefix}big_cache`), null);
+  // 本账号自己的 BIN 仍然正常写入
+  assert.equal(local.getItem(`${prefix}bin_data_a`), "706c010203");
+  assert.equal(local.getItem(`${prefix}current_bin_id`), "a");
+});
+
 test("prepareMultiGameLaunch isolates a BIN read error from other accounts", async () => {
   const local = new MemoryStorage();
   const session = new MemoryStorage();

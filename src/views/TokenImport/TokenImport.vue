@@ -1,13 +1,12 @@
 <template>
   <div class="token-import-page">
+    <AppNav />
     <div class="container">
       <!-- 页面头部 -->
       <div class="page-header">
         <div class="header-content">
           <div class="header-top">
             <img src="/icons/xiaoyugan.png" alt="XYZW" class="brand-logo" />
-            <!-- 主题切换按钮 -->
-            <ThemeToggle />
           </div>
           <h1>游戏Token管理</h1>
         </div>
@@ -209,6 +208,18 @@
                 批量操作
               </n-button>
             </n-dropdown>
+
+            <div
+              class="game-sound-toggle"
+              title="关闭后进入游戏会同时关掉音乐、音效、震动、点击特效（含点击音效），单开与批量打开都生效；游戏默认 60 帧、不进入省电模式"
+            >
+              <span>进入游戏后声音</span>
+              <n-switch
+                :value="gameSoundEnabled"
+                size="small"
+                @update:value="setGameSound"
+              />
+            </div>
           </div>
         </div>
 
@@ -737,9 +748,10 @@ import lz4 from "lz4js";
 import { NAlert, NIcon, useDialog, useMessage } from "naive-ui";
 import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import AppNav from "@/components/Common/AppNav.vue";
 import useIndexedDB from "@/hooks/useIndexedDB";
-
 import { $emit } from "@/stores/events/index.ts";
+
 import { selectedTokenId, useTokenStore } from "@/stores/tokenStore";
 import {
   buildRoleBin,
@@ -753,6 +765,7 @@ import {
   selectAllTokenIds,
   toggleTokenSelection,
 } from "@/utils/gameSelection";
+import { gameSoundEnabled, setGameSound } from "@/utils/gameSound";
 import { scheduleAuthUserRequest, transformToken } from "@/utils/token";
 import {
   generateBinFromCombUser,
@@ -1991,7 +2004,7 @@ onUnmounted(() => {
 .token-import-page {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: var(--spacing-xl) 0;
+  padding: 0 0 var(--spacing-xl);
 }
 
 /* 深色主题下的页面背景 */
@@ -2002,7 +2015,7 @@ onUnmounted(() => {
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 var(--spacing-lg);
+  padding: var(--spacing-xl) var(--spacing-lg) 0;
 }
 
 .page-header {
@@ -2255,6 +2268,19 @@ onUnmounted(() => {
 
 .sort-buttons {
   flex-shrink: 0;
+}
+
+.game-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .header-actions {
