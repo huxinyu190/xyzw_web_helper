@@ -9,3 +9,8 @@
 *.html text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
+
+# Windows 7 运行包的脚本必须保持 CRLF，否则 cmd.exe 解析可能异常
+*.bat text eol=crlf
+*.vbs text eol=crlf
+deploy/win7/README.txt -text

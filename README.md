@@ -154,6 +154,15 @@ pnpm run lint     # 代码检查和修复
 pnpm run format   # 代码格式化
 ```
 
+### 部署到 Windows 7（离线 / 零安装）
+
+Windows 7 上跑不了 Node 18+，所以**不能在本机构建**，需要"别处构建、本机只运行"。
+仓库已提供现成的运行方案：
+
+- 运行包源文件：`deploy/win7/`（`server.js` + 启动脚本，零 npm 依赖，只需 Node 12）
+- 自动构建：`.github/workflows/build-win7-package.yml`（Actions 里一键生成 zip）
+- 完整步骤：见 [docs/deploy-win7.md](docs/deploy-win7.md)
+
 ### 部署代理服务 (Cloudflare Pages)
 
 本项目推荐使用 Cloudflare Pages 进行部署，内置了对 API 代理的支持。
