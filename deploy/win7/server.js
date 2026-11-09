@@ -38,7 +38,7 @@ const ROOT = ROOT_ARG
   ? path.resolve(process.cwd(), ROOT_ARG)
   : path.join(__dirname, "web");
 const PID_FILE = path.join(__dirname, "server.pid");
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 
 // ---------------------------------------------------------------- MIME
 const MIME = {

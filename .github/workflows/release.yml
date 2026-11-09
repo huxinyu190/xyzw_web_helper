@@ -1,0 +1,56 @@
+name: 发布 Release（Win7 运行包）
+
+# 推一个 v 开头的标签即可自动发布：
+#   git tag v2.1.0
+#   git push mine v2.1.0
+#
+# 流程：复用「构建 Win7 便携包」工作流 → 下载 x64/x86 产物 →
+#       用仓库自带 GITHUB_TOKEN 创建 Release 并挂上两个 zip。
+# 不需要任何本地打包，也不需要额外授权。
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-win7-package.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 查看产物
+        run: ls -lh artifacts
+
+      - name: 创建 Release 并上传运行包
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} 已存在，改为上传/覆盖附件"
+            gh release upload "${GITHUB_REF_NAME}" artifacts/*.zip \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" artifacts/*.zip \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "XYZW Web Helper ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+
+      - name: 输出 Release 地址
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" \
+            --json url,assets --jq '"Release: " + .url + "\n附件: " + ([.assets[].name] | join(", "))'

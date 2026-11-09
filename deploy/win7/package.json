@@ -1,7 +1,7 @@
 {
   "name": "xyzw-win7-runtime",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "commonjs",
   "description": "Windows 7 便携运行目录：只用 Node 12 启动 server.js，无 npm 依赖"
 }
