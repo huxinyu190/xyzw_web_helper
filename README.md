@@ -124,6 +124,12 @@ Node.js >= 18.0.0
 pnpm >= 9.0.0 (推荐)
 ```
 
+> ⚠️ **Windows 7 用户注意**：Node.js 18/20 **无法**在 Windows 7 上安装（官方要求 Win8.1+，
+> 安装器会提示 "only supported on Windows 8.1 ..."）。Win7 上不需要装 Node —— 直接下载
+> [Release](https://github.com/huxinyu190/xyzw_web_helper/releases) 里的 `xyzw-win7-x64.zip`，
+> 解压双击 `start.bat` 即可（内附 Node 12 便携版）。
+> 完整说明见 [docs/deploy-win7.md](docs/deploy-win7.md)。
+
 ### 安装与运行
 
 ```bash

@@ -159,7 +159,12 @@ xyzw-win7\
 
 ## 路线 B：自己构建一次（最可控）
 
-适合：你手边有一台 Win10/11 或 Mac，愿意装一次 Node。
+适合：你手边有一台 **Win10/11、Mac 或 Linux**，愿意装一次 Node。
+
+> ⚠️ **这台"构建机"不能是 Windows 7。**
+> Node.js 18/20 官方只支持 Windows 8.1 及以上，在 Win7 上运行安装包会直接报
+> `This application is only supported on Windows 8.1, Windows Server 2012 R2, or higher`。
+> Win7 上**只负责运行**（用路线 A 的现成包），不参与构建。
 
 ### B-1 准备构建机
 
@@ -377,23 +382,24 @@ netsh advfirewall firewall add rule name="XYZW 8080" dir=in action=allow protoco
 
 ## 6. 故障排查
 
-| 现象                                       | 原因                                              | 解决                                                                            |                            |
-| ---------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------- |
-| 双击 `start.bat` 一闪而过                      | 目录不对 / 缺 Node / 缺 web                           | 打开 cmd，执行 `cd /d C:\xyzw-win7` 再运行 `start.bat`，看报错原文                          |                            |
-| 提示 `node\node.exe not found`             | Node 文件夹层级放错                                    | 应是 `C:\xyzw-win7\node\node.exe`，不是 `...\node\node-v12.22.12-win-x64\node.exe` |                            |
-| 提示 `web\index.html not found`            | dist 复制层级放错                                     | 应是 `C:\xyzw-win7\web\index.html`，不是 `...\web\dist\index.html`                 |                            |
-| 报错缺少 `api-ms-win-crt-runtime-l1-1-0.dll` | 干净 Win7 缺 UCRT                                  | 安装 KB2999226 或 `vc_redist.x64.exe`（32 位系统装 x86 版）                             |                            |
-| 黑窗口报 `端口 8080 已被占用`                      | 端口冲突                                            | 换端口 `--port 8081`，或 \`netstat -ano                                            | findstr :8080\` 找到 PID 后结束 |
-| 浏览器打开是空白页                                | 用了 IE / 版本太老                                    | 换 Firefox 115 ESR 或 Chrome 109                                                |                            |
-| 页面能开但刷新 404                              | 用了别的静态服务器                                       | 必须用本包的 `server.js`（它做了 SPA 回退）                                                |                            |
-| 页面样式/脚本 404                              | `web\assets` 没复制全                               | 重新完整复制 `dist` 内容，别只复制 `index.html`                                            |                            |
-| 进游戏白屏                                    | `/game/` 资源缺失或被拦截                               | 访问 `http://127.0.0.1:8080/game/index.html` 看是否 200；F12 看控制台                   |                            |
-| 手机号/微信登录失败                               | 代理不通 / 外网被限 / 系统时间不对                            | 校正系统时间；确认能访问 `hortorgames.com`、`open.weixin.qq.com`                           |                            |
-| 提示"连接已断开"                                | 游戏 WebSocket 被网络阻断                              | 换网络；确认防火墙未拦 443                                                               |                            |
-| 杀毒软件报毒 / 删除 node.exe                     | 误报                                              | 把 `C:\xyzw-win7` 加入白名单后重新解压                                                   |                            |
-| 关掉黑窗口后网页打不开                              | 服务随窗口退出                                         | 正常现象；需要后台运行就用 `start-hidden.vbs`                                              |                            |
-| 打开很慢                                     | 机械硬盘 + 首次加载                                     | 第二次会走缓存；确认 `web\assets` 完整                                                    |                            |
-| 启动时报 `Unexpected token '.'` 之类语法错误       | 系统里设过 `NODE_OPTIONS` 环境变量（例如指向某个新版 Node 的 shim） | `Win+R` → `cmd` → `set NODE_OPTIONS=` 后再启动，或到「系统属性 → 环境变量」里删掉该项               |                            |
+| 现象 | 原因 | 解决 |
+| --- | --- | --- |
+| 在 Win7 上装 Node 20/18，提示 `This application is only supported on Windows 8.1, Windows Server 2012 R2, or higher` | Node 18+ 不支持 Win7，这是正常的 | **不要在 Win7 上装 Node**：直接下载 [Release](https://github.com/huxinyu190/xyzw_web_helper/releases) 的运行包（内附 Node 12），解压双击 `start.bat` |
+| 双击 `start.bat` 一闪而过 | 目录不对 / 缺 Node / 缺 web | 打开 cmd，执行 `cd /d C:\xyzw-win7` 再运行 `start.bat`，看报错原文 |
+| 提示 `node\node.exe not found` | Node 文件夹层级放错 | 应是 `C:\xyzw-win7\node\node.exe`，不是 `...\node\node-v12.22.12-win-x64\node.exe` |
+| 提示 `web\index.html not found` | dist 复制层级放错 | 应是 `C:\xyzw-win7\web\index.html`，不是 `...\web\dist\index.html` |
+| 报错缺少 `api-ms-win-crt-runtime-l1-1-0.dll` | 干净 Win7 缺 UCRT | 安装 KB2999226 或 `vc_redist.x64.exe`（32 位系统装 x86 版） |
+| 黑窗口报 `端口 8080 已被占用` | 端口冲突 | 换端口 `--port 8081`；或用 `netstat -ano` 配合 `findstr :8080` 找到 PID 后 `taskkill /PID <PID> /F` |
+| 浏览器打开是空白页                                | 用了 IE / 版本太老                                    | 换 Firefox 115 ESR 或 Chrome 109                                                |
+| 页面能开但刷新 404                              | 用了别的静态服务器                                       | 必须用本包的 `server.js`（它做了 SPA 回退）                                                |
+| 页面样式/脚本 404                              | `web\assets` 没复制全                               | 重新完整复制 `dist` 内容，别只复制 `index.html`                                            |
+| 进游戏白屏                                    | `/game/` 资源缺失或被拦截                               | 访问 `http://127.0.0.1:8080/game/index.html` 看是否 200；F12 看控制台                   |
+| 手机号/微信登录失败                               | 代理不通 / 外网被限 / 系统时间不对                            | 校正系统时间；确认能访问 `hortorgames.com`、`open.weixin.qq.com`                           |
+| 提示"连接已断开"                                | 游戏 WebSocket 被网络阻断                              | 换网络；确认防火墙未拦 443                                                               |
+| 杀毒软件报毒 / 删除 node.exe                     | 误报                                              | 把 `C:\xyzw-win7` 加入白名单后重新解压                                                   |
+| 关掉黑窗口后网页打不开                              | 服务随窗口退出                                         | 正常现象；需要后台运行就用 `start-hidden.vbs`                                              |
+| 打开很慢                                     | 机械硬盘 + 首次加载                                     | 第二次会走缓存；确认 `web\assets` 完整                                                    |
+| 启动时报 `Unexpected token '.'` 之类语法错误       | 系统里设过 `NODE_OPTIONS` 环境变量（例如指向某个新版 Node 的 shim） | `Win+R` → `cmd` → `set NODE_OPTIONS=` 后再启动，或到「系统属性 → 环境变量」里删掉该项               |
 
 ---
 
