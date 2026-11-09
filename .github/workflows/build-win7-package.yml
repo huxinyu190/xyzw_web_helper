@@ -32,9 +32,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 安装 pnpm
+        # 版本由 package.json 的 packageManager 字段决定（pnpm@10.19.0），
+        # 这里不要再写 version，避免出现 "Multiple versions of pnpm specified"
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: 安装 Node（仅用于构建）
         uses: actions/setup-node@v4
