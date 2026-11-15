@@ -124,9 +124,15 @@ jobs:
               }
 
               Write-Host "   复制便携 Node"
-              Copy-Item -Recurse -Force (Join-Path $nodeDir "*") (Join-Path $pkg "node")
+              # 官方 zip 内部还有一层 node-v<ver>-win-<arch>\ 目录，需要进去再复制
+              $innerDir = Join-Path $nodeDir "node-v$ver-win-$arch"
+              $nodeSource = if (Test-Path $innerDir) { $innerDir } else { $nodeDir }
+              Copy-Item -Recurse -Force (Join-Path $nodeSource "*") (Join-Path $pkg "node")
 
-              if (-not (Test-Path (Join-Path $pkg "node/node.exe"))) { Fail "$name：node/node.exe 缺失" }
+              if (-not (Test-Path (Join-Path $pkg "node/node.exe"))) {
+                $listing = (Get-ChildItem (Join-Path $pkg "node") -Force | Select-Object -First 8 | ForEach-Object { $_.Name }) -join ", "
+                Fail "$name：node/node.exe 缺失（来源 $nodeSource；目录内容：$listing）"
+              }
               if (-not (Test-Path (Join-Path $pkg "web/index.html"))) { Fail "$name：web/index.html 缺失" }
 
               $zipPath = Join-Path $cwd "out/xyzw-$name.zip"
