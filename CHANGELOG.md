@@ -1,8 +1,10 @@
 # 更新日志
 
-## [未发布]
+## [2.2.0] - 2026-11-15
 
 ### ✨ 新增功能
+- **Windows 便携包（Win7 / Win10+）**：Release 同时提供 `xyzw-win10-x64.zip`（内置 Node 22 LTS）、`xyzw-win7-x64.zip`、`xyzw-win7-x86.zip`（Node 12.22.12）；解压双击 `run.vbs` 即后台启动并自动打开浏览器，无需安装 Node/pnpm/Git，也无需任何配置。
+- **Windows 运行包更新**：Win7 / Win10+ 包都带上「检查更新」（游戏版本 2.54.2）与声音四项开关等最新修复。
 - **游戏版本检查与更新**：Token 管理页新增「检查更新」按钮，按官方清单里的 `codeVersion` 判定最新游戏版本（实测当前为 **2.54.2**，对应资源清单 0.36.0），列出新增资源包并一键切换；更新后新活动的资源才会加载。
 
 ### 🛠️ 技术改进
@@ -11,6 +13,8 @@
 - 版本成对保存（清单版本 + 代码版本），老数据自动迁移到 0.36.0 / 2.54.2，避免 `CODE_VERSION` 与清单 `codeVersion` 不一致触发「请重启」。
 - 新增 `src/utils/gameVersion.js`、`src/composables/useGameVersion.js` 与 9 项单测。
 - 文档：`docs/game-version-update.md` 记录两个版本号的区别、官方版本表与排错。
+- 运行包目录 `deploy/win7/` → `deploy/portable/`（Win7 与 Win10+ 共用一套脚本）；构建工作流合并为 `build-portable-package.yml`，一次产出三个 zip。
+- `server.js` 新增 `--open` 参数，版本号改为读取 `package.json`，避免与发版号脱节。
 
 ## [2.1.0] - 2026-11-09
 

@@ -1,7 +1,19 @@
-# 在干净的 Windows 7 上部署 XYZW Web Helper
+# 在干净的 Windows（Win7 / Win10+）上部署 XYZW Web Helper
 
-> 适用场景：手上只有仓库地址 `https://github.com/huxinyu190/xyzw_web_helper.git`，  
-> 目标机器是一台**非常干净、几乎没装任何软件**的 Windows 7，希望把项目跑起来。
+> 适用场景：手上只有仓库地址 `https://github.com/huxinyu190/xyzw_web_helper.git`，
+> 目标机器是一台**非常干净、几乎没装任何软件**的 Windows，希望把项目跑起来。
+
+**只想马上能用？** 不用往下读，直接去
+[Release 页面](https://github.com/huxinyu190/xyzw_web_helper/releases/latest) 下载对应的包，
+解压后双击 `run.vbs` 即可（浏览器会自动打开）：
+
+| 你的系统 | 下载 | 内置 Node |
+| --- | --- | --- |
+| Windows 10 / 11（64 位） | `xyzw-win10-x64.zip` | 22 LTS |
+| Windows 7（64 位） | `xyzw-win7-x64.zip` | 12.22.12 |
+| Windows 7（32 位） | `xyzw-win7-x86.zip` | 12.22.12 x86 |
+
+> 下面的内容是给"想自己构建 / 想搞清原理 / 遇到报错"的人看的。
 
 ---
 
@@ -77,27 +89,30 @@ Firefox 115 ESR 官方下载（任选其一，拷到 Win7 安装）：
 
 ## 2. 运行包里有什么
 
-仓库里已经准备好 Win7 运行所需的文件，位于 `deploy/win7/`：
+仓库里已经准备好便携运行所需的全部文件，位于 `deploy/portable/`。
+**Win7 包与 Win10+ 包共用同一套脚本**，唯一区别是 `node\` 里放哪个版本的便携 Node：
 
 | 文件                 | 作用                                                      |
 | ------------------ | ------------------------------------------------------- |
 | `server.js`        | 本地服务器：托管页面 + SPA 路由回退 + `/api/*` 代理，**零 npm 依赖**        |
-| `package.json`     | 只用来声明 `type: commonjs`，让 Node 以 CommonJS 运行 `server.js` |
-| `start.bat`        | 启动（仅本机访问 `127.0.0.1:8080`）                              |
+| `package.json`     | 声明 `type: commonjs` 与版本号，`server.js` 从这里读版本号              |
+| `run.vbs`          | **一键启动（推荐）**：后台运行 + 自动打开浏览器 + 已在运行时复用现有服务               |
+| `start.bat`        | 启动并保留控制台窗口（仅本机访问 `127.0.0.1:8080`）                       |
 | `start-lan.bat`    | 启动（监听 `0.0.0.0`，允许局域网其它设备访问）                            |
-| `stop.bat`         | 停止后台运行的服务（读 `server.pid`）                               |
+| `stop.bat`         | 停止后台运行的服务（读 `server.pid`，不会误杀其它 node）                   |
 | `open.bat`         | 用默认浏览器打开 `http://127.0.0.1:8080/`                       |
 | `start-hidden.vbs` | 无窗口后台启动，可放进「启动」文件夹做开机自启                                 |
 | `README.txt`       | 给最终用户看的简短说明                                             |
 
-组装完成后的目录长这样（**这就是要拷到 Win7 的东西**）：
+组装完成后的目录长这样（**这就是要拷到目标机器的东西**）：
 
 ```
-xyzw-win7\
-├─ node\                  ← 便携版 Node.js 12.22.12（node.exe 等，解压后直接放进来）
+xyzw\
+├─ node\                  ← 便携版 Node（Win7 包 12.22.12 / Win10+ 包 22 LTS）
 ├─ web\                   ← 前端构建产物（dist 里的全部文件）
 ├─ server.js
 ├─ package.json
+├─ run.vbs
 ├─ start.bat
 ├─ start-lan.bat
 ├─ stop.bat
@@ -112,19 +127,26 @@ xyzw-win7\
 
 适合：没有开发环境、也不想在别的电脑装 Node。
 
-仓库已自带工作流 `.github/workflows/build-win7-package.yml`，它会：
+仓库已自带工作流 `.github/workflows/build-portable-package.yml`，它会：
 
 1. 在 GitHub 的 Windows 机器上 `pnpm install && pnpm build`；
-2. 自动下载 Node 12.22.12 便携版放进 `node\`；
-3. 把 `dist` 放进 `web\`，连同 `server.js`、`*.bat` 一起打成 `xyzw-win7-x64.zip` / `xyzw-win7-x86.zip`。
+2. Win7 包下载 Node 12.22.12、Win10+ 包下载 Node 22 LTS 放进 `node\`；
+3. 把 `dist` 放进 `web\`，连同 `server.js`、`run.vbs`、`*.bat` 一起打成交付 zip。
 
 ### A-0 直接下载已发布的运行包（首选，不需要登录）
 
 仓库发布过 Release 之后，直接下载附件即可，**不需要 GitHub 账号**：
 
 1. 打开 <https://github.com/huxinyu190/xyzw_web_helper/releases/latest>
-2. 下载 `xyzw-win7-x64.zip`（64 位系统）或 `xyzw-win7-x86.zip`（32 位系统）
-3. 解压一次就是完整目录（直接包含 `node\`、`web\`、`start.bat`），
+2. 按系统下载：
+
+   | 系统 | 文件 |
+   | --- | --- |
+   | Win10 / Win11（64 位） | `xyzw-win10-x64.zip` |
+   | Win7（64 位） | `xyzw-win7-x64.zip` |
+   | Win7（32 位） | `xyzw-win7-x86.zip` |
+
+3. 解压一次就是完整目录（直接包含 `node\`、`web\`、`run.vbs`、`start.bat`），
    跳到 [第 3 节](#3-在-windows-7-上部署一步一步) 即可
 
 > 这里下载的是**最终运行包**，不用再构建、不用装 Node。
@@ -135,17 +157,17 @@ xyzw-win7\
 1. 浏览器打开你的仓库：`https://github.com/huxinyu190/xyzw_web_helper`
 2. 点顶部 **Actions**
 3. 首次使用如果是 fork 的仓库，会看到提示 → 点 **I understand my workflows, go ahead and enable them**
-4. 左侧点 **构建 Win7 便携包** → 右侧 **Run workflow** → 分支选 `main` → 绿色 **Run workflow**
+4. 左侧点 **构建 Windows 便携包** → 右侧 **Run workflow** → 分支选 `main` → 绿色 **Run workflow**
 5. 等 3–6 分钟，列表里出现绿色 ✅
 
-也可以直接推送代码触发（工作流已配置 `push` 到 `main` 且改动涉及 `src/`、`public/`、`deploy/win7/` 时自动跑）。
+也可以直接推送代码触发（工作流已配置 `push` 到 `main` 且改动涉及 `src/`、`public/`、`deploy/portable/` 时自动跑）。
 
 ### A-2 下载运行包
 
 1. 点进这次成功的运行记录
 2. 页面**最下方** Artifacts 区域
-3. 下载 `xyzw-win7-x64`（64 位系统）或 `xyzw-win7-x86`（32 位系统）
-4. 下载得到的是一个 zip，里面还有一个 `xyzw-win7.zip`，再解压一次就是最终目录
+3. 下载 `xyzw-win10-x64`（Win10/11）、`xyzw-win7-x64`（Win7 64 位）或 `xyzw-win7-x86`（Win7 32 位）
+4. 下载得到的是一个 zip，里面还有一个同名 zip，再解压一次就是最终目录
 
 > GitHub 的 Artifacts 下载**需要登录 GitHub 账号**。如果 Win7 上没有浏览器能登录 GitHub，  
 > 就在别的设备上下载好，再用 U 盘 / 网盘拷过去。
@@ -236,11 +258,11 @@ xyzw-win7\web\index.html     ← 必须存在
 
 ---
 
-## 3. 在 Windows 7 上部署（一步一步）
+## 3. 在 Windows 上部署（一步一步）
 
 ### 3.1 拷贝
 
-把 `xyzw-win7.zip` 通过 U 盘、共享文件夹或网盘拷到 Win7。
+把下载到的 zip 通过 U 盘、共享文件夹或网盘拷到目标机器。
 
 > 建议放在 **`C:\` 根目录**，路径不要有中文、空格和特殊符号，例如：  
 > ✅ `C:\xyzw-win7`  
@@ -255,11 +277,12 @@ xyzw-win7\web\index.html     ← 必须存在
 ### 3.3 首次启动
 
 1. 进入 `C:\xyzw-win7`
-2. 双击 **`start.bat`**
-3. 会弹出一个黑色命令行窗口，出现类似内容就是成功：
+2. 双击 **`run.vbs`**（推荐）：窗口一闪而过，浏览器会自动打开；
+   想看到命令行窗口/日志，就改双击 **`start.bat`**
+3. 用 `start.bat` 时会显示类似内容，表示成功：
 
 ```
-  XYZW Web Helper v2.1.0
+  XYZW Web Helper v2.2.0
   静态目录: C:\xyzw-win7\web
   监听地址: 127.0.0.1:8080
   本机访问: http://127.0.0.1:8080/
@@ -491,8 +514,8 @@ curl -I http://127.0.0.1:8080/tokens      # 应返回 200（SPA 回退）
 
 ### 9.5 相关文件
 
-- 运行包源文件：`deploy/win7/`
-- 自动构建工作流：`.github/workflows/build-win7-package.yml`
+- 运行包源文件：`deploy/portable/`
+- 自动构建工作流：`.github/workflows/build-portable-package.yml`（产出 Win7 x64/x86 + Win10 x64）
 - 云端部署（Cloudflare Pages）说明：`README.md` 的「部署代理服务」章节
 - 原 `worker.js` 代理规则：仓库根目录
 
@@ -500,8 +523,8 @@ curl -I http://127.0.0.1:8080/tokens      # 应返回 200（SPA 回退）
 
 ```bash
 # 在仓库里打标签并推送，release.yml 会自动构建并创建 Release
-git tag v2.1.0
-git push mine v2.1.0
+git tag v2.2.0
+git push mine v2.2.0
 ```
 
 - 发布页：<https://github.com/huxinyu190/xyzw_web_helper/releases>
@@ -509,8 +532,8 @@ git push mine v2.1.0
 - 想重发同一个版本：删掉旧标签重推即可
 
 ```bash
-git tag -d v2.1.0
-git push mine :refs/tags/v2.1.0
-git tag v2.1.0
-git push mine v2.1.0
+git tag -d v2.2.0
+git push mine :refs/tags/v2.2.0
+git tag v2.2.0
+git push mine v2.2.0
 ```

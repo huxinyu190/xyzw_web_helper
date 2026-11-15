@@ -1,17 +1,22 @@
 /*
- * XYZW Web Helper - Win7 便携运行服务器
+ * XYZW Web Helper - Windows 便携运行服务器（Win7 / Win10+ 通用）
  *
- * 目标：在一台非常干净的 Windows 7 上，不装任何软件，解压即用。
- * 依赖：只依赖 Node.js 12.22.12（最后一个官方支持 Win7 的版本），零 npm 依赖。
+ * 目标：在一台干净电脑上，不装任何软件，解压双击即用。
+ * 依赖：零 npm 依赖，只需要包内自带的 Node：
+ *   - Win7 包：Node 12.22.12（最后一个官方支持 Win7 的版本）
+ *   - Win10+ 包：Node 22 LTS（官方支持 Win10 1809+ / Win11）
+ *   同一份 server.js 在两个版本上都能跑。
  *
  * 功能：
  *   1. 托管 ./web 下的前端构建产物（dist）
  *   2. SPA 路由回退（/tokens、/admin/xxx 刷新不 404）
  *   3. /api/* 反向代理（与仓库根目录 worker.js 的规则一致）
  *   4. 端口占用、目录缺失时给出中文提示
+ *   5. --open 启动后自动打开默认浏览器
  *
  * 用法：
  *   node\node.exe server.js                 # 127.0.0.1:8080
+ *   node\node.exe server.js --open          # 启动后自动开浏览器
  *   node\node.exe server.js --port 80       # 换端口
  *   node\node.exe server.js --host 0.0.0.0  # 允许局域网访问
  *   node\node.exe server.js --root D:\web   # 指定静态目录
@@ -22,6 +27,7 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const { exec } = require("child_process");
 const { URL } = require("url");
 
 // ---------------------------------------------------------------- 基础参数
@@ -38,7 +44,23 @@ const ROOT = ROOT_ARG
   ? path.resolve(process.cwd(), ROOT_ARG)
   : path.join(__dirname, "web");
 const PID_FILE = path.join(__dirname, "server.pid");
-const VERSION = "2.1.0";
+const OPEN_BROWSER = process.argv.indexOf("--open") !== -1;
+
+// 版本号优先取同目录 package.json，避免和发版号脱节
+function readVersion() {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(__dirname, "package.json"), "utf8"),
+    );
+    if (pkg && typeof pkg.version === "string" && pkg.version) {
+      return pkg.version;
+    }
+  } catch (error) {
+    /* 读不到就用兜底值 */
+  }
+  return "2.2.0";
+}
+const VERSION = readVersion();
 
 // ---------------------------------------------------------------- MIME
 const MIME = {
@@ -520,7 +542,33 @@ server.listen(PORT, HOST, function () {
   console.log("");
   console.log("  关闭服务: 按 Ctrl+C，或双击 stop.bat");
   console.log("");
+
+  if (OPEN_BROWSER) {
+    const url = "http://" + shown + ":" + PORT + "/";
+    setTimeout(function () {
+      openBrowser(url);
+    }, 400);
+  }
 });
+
+/** 用系统默认浏览器打开地址（Windows / macOS / Linux） */
+function openBrowser(url) {
+  let command;
+  if (process.platform === "win32") {
+    command = 'start "" "' + url + '"';
+  } else if (process.platform === "darwin") {
+    command = 'open "' + url + '"';
+  } else {
+    command = 'xdg-open "' + url + '"';
+  }
+  try {
+    exec(command, function () {
+      /* 打不开也不影响服务 */
+    });
+  } catch (error) {
+    /* ignore */
+  }
+}
 
 function shutdown() {
   try {

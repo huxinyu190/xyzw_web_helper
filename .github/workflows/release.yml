@@ -1,11 +1,11 @@
-name: 发布 Release（Win7 运行包）
+name: 发布 Release（Windows 便携包）
 
 # 推一个 v 开头的标签即可自动发布：
-#   git tag v2.1.0
-#   git push mine v2.1.0
+#   git tag v2.2.0
+#   git push mine v2.2.0
 #
-# 流程：复用「构建 Win7 便携包」工作流 → 下载 x64/x86 产物 →
-#       用仓库自带 GITHUB_TOKEN 创建 Release 并挂上两个 zip。
+# 流程：复用「构建 Windows 便携包」工作流 → 下载三个产物 →
+#       用仓库自带 GITHUB_TOKEN 创建 Release 并挂上 zip。
 # 不需要任何本地打包，也不需要额外授权。
 
 on:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    uses: ./.github/workflows/build-win7-package.yml
+    uses: ./.github/workflows/build-portable-package.yml
 
   release:
     needs: build
@@ -32,20 +32,52 @@ jobs:
       - name: 查看产物
         run: ls -lh artifacts
 
-      - name: 创建 Release 并上传运行包
+      - name: 创建/更新 Release 并上传运行包
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+
+          read -r -d '' NOTES <<'EOF' || true
+          ## 下载哪个？
+
+          | 你的系统 | 下载 | 内置 Node |
+          | --- | --- | --- |
+          | Windows 10 / 11（64 位，绝大多数人） | `xyzw-win10-x64.zip` | 22 LTS |
+          | Windows 7（64 位） | `xyzw-win7-x64.zip` | 12.22.12 |
+          | Windows 7（32 位） | `xyzw-win7-x86.zip` | 12.22.12 x86 |
+
+          ## 怎么用（不需要安装任何东西）
+
+          1. 解压到简单路径，例如 `C:\xyzw` 或 `D:\xyzw`（不要放桌面、不要用中文路径）；
+          2. 双击 `run.vbs`：后台启动本地服务并自动打开浏览器；
+          3. 用完双击 `stop.bat` 关闭。
+
+          想看到服务窗口/日志就双击 `start.bat`，关窗口即停止。
+          局域网访问用 `start-lan.bat`，手机/其他电脑打开 `http://本机IP:8080/`。
+
+          ## 浏览器要求
+
+          - Win10/11：Edge / Chrome / Firefox 任意较新版本
+          - Win7：Chrome 109 或 Firefox 115 ESR（IE 打不开）
+
+          进游戏后若提示缺少 `api-ms-win-crt-*.dll`，装一次 VC++ 2015-2022 运行库即可。
+          详细排错见仓库 `docs/deploy-win7.md`。
+          EOF
+
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} 已存在，改为上传/覆盖附件"
+            echo "Release ${GITHUB_REF_NAME} 已存在，更新说明并覆盖附件"
+            gh release edit "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "XYZW Web Helper ${GITHUB_REF_NAME}" \
+              --notes "${NOTES}"
             gh release upload "${GITHUB_REF_NAME}" artifacts/*.zip \
               --repo "${GITHUB_REPOSITORY}" --clobber
           else
             gh release create "${GITHUB_REF_NAME}" artifacts/*.zip \
               --repo "${GITHUB_REPOSITORY}" \
               --title "XYZW Web Helper ${GITHUB_REF_NAME}" \
-              --generate-notes
+              --notes "${NOTES}"
           fi
 
       - name: 输出 Release 地址

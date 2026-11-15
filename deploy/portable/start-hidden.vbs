@@ -1,4 +1,4 @@
-' XYZW Web Helper - start the server without a console window
+﻿' XYZW Web Helper - start the server without a console window
 ' Put a shortcut of this file into shell:startup to start it on boot.
 Dim fso, shell
 Set fso = CreateObject("Scripting.FileSystemObject")

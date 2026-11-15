@@ -1,0 +1,135 @@
+name: 构建 Windows 便携包
+
+# 作用：不需要任何本地开发环境，GitHub 帮你 build，并打成「解压即用」的
+# Windows 运行包（内含便携版 Node + 前端产物，无需安装任何软件）。
+#
+# 产出三个包：
+#   xyzw-win7-x64.zip   Win7 64 位（内置 Node 12.22.12，最后一个支持 Win7 的版本）
+#   xyzw-win7-x86.zip   Win7 32 位（内置 Node 12.22.12 x86）
+#   xyzw-win10-x64.zip  Win10 / Win11 64 位（内置 Node 22 LTS）
+#
+# 用法：仓库页面 → Actions → 左侧「构建 Windows 便携包」→ Run workflow
+#       跑完后在该次运行页面底部 Artifacts 下载所需包
+#
+# 推 v* 标签（如 v2.2.0）时，release.yml 会调用本工作流并自动挂到 Release 上。
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "vite.config.js"
+      - "deploy/portable/**"
+      - ".github/workflows/build-portable-package.yml"
+
+concurrency:
+  group: portable-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm
+        # 版本由 package.json 的 packageManager 字段决定（pnpm@10.19.0），
+        # 这里不要再写 version，避免出现 "Multiple versions of pnpm specified"
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node（仅用于构建）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建前端
+        run: pnpm build
+
+      - name: 组装运行包（Win7 x64/x86 + Win10 x64）
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if (-not (Test-Path "dist/index.html")) { throw "dist/index.html 不存在，构建失败" }
+
+          # 内置的便携 Node：Win7 用 12，Win10+ 用 22 LTS
+          $targets = @(
+            @{ Name = "win7-x64";  NodeVersion = "12.22.12"; Arch = "x64" },
+            @{ Name = "win7-x86";  NodeVersion = "12.22.12"; Arch = "x86" },
+            @{ Name = "win10-x64"; NodeVersion = "22.23.5";  Arch = "x64" }
+          )
+
+          $commonFiles = @(
+            "server.js", "package.json", "README.txt",
+            "run.vbs", "start.bat", "start-lan.bat", "stop.bat", "open.bat", "start-hidden.vbs"
+          )
+
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+
+          foreach ($target in $targets) {
+            $ver = $target.NodeVersion
+            $arch = $target.Arch
+            $dir = "node-v$ver-win-$arch"
+            $zipName = "node-$ver-$arch.zip"
+
+            if (-not (Test-Path $zipName)) {
+              Invoke-WebRequest -Uri "https://nodejs.org/dist/v$ver/$zipName" -OutFile $zipName
+              Expand-Archive -Path $zipName -DestinationPath "node-$ver-$arch"
+            }
+
+            $pkg = "out/xyzw-$($target.Name)/xyzw"
+            New-Item -ItemType Directory -Force -Path "$pkg/web", "$pkg/node" | Out-Null
+
+            Copy-Item -Recurse -Force "dist/*" "$pkg/web/"
+            foreach ($file in $commonFiles) {
+              Copy-Item -Force "deploy/portable/$file" "$pkg/"
+            }
+            Copy-Item -Recurse -Force "$dir/*" "$pkg/node/"
+
+            # 包内自检：缺文件就别发出去
+            if (-not (Test-Path "$pkg/node/node.exe")) { throw "$($target.Name): node.exe 缺失" }
+            if (-not (Test-Path "$pkg/web/index.html")) { throw "$($target.Name): web/index.html 缺失" }
+
+            Compress-Archive -Path "$pkg/*" -DestinationPath "out/xyzw-$($target.Name).zip" -Force
+            $size = [math]::Round((Get-Item "out/xyzw-$($target.Name).zip").Length / 1MB, 1)
+            Write-Host "已生成 out/xyzw-$($target.Name).zip ($size MB)"
+          }
+
+          Get-ChildItem out/*.zip | ForEach-Object {
+            "{0}  {1} MB" -f $_.Name, [math]::Round($_.Length / 1MB, 1)
+          }
+
+      - name: 上传 Win7 x64
+        uses: actions/upload-artifact@v4
+        with:
+          name: xyzw-win7-x64
+          path: out/xyzw-win7-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 上传 Win7 x86
+        uses: actions/upload-artifact@v4
+        with:
+          name: xyzw-win7-x86
+          path: out/xyzw-win7-x86.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 上传 Win10 x64
+        uses: actions/upload-artifact@v4
+        with:
+          name: xyzw-win10-x64
+          path: out/xyzw-win10-x64.zip
+          if-no-files-found: error
+          retention-days: 30

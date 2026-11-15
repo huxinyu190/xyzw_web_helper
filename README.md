@@ -160,14 +160,23 @@ pnpm run lint     # 代码检查和修复
 pnpm run format   # 代码格式化
 ```
 
-### 部署到 Windows 7（离线 / 零安装）
+### 部署到 Windows（离线 / 零安装）
 
-Windows 7 上跑不了 Node 18+，所以**不能在本机构建**，需要"别处构建、本机只运行"。
-仓库已提供现成的运行方案：
+不想装 Node、pnpm、Git？直接下载现成的便携包，解压双击 `run.vbs` 就能用：
 
-- 运行包源文件：`deploy/win7/`（`server.js` + 启动脚本，零 npm 依赖，只需 Node 12）
-- 自动构建：`.github/workflows/build-win7-package.yml`（Actions 里一键生成 zip）
-- 完整步骤：见 [docs/deploy-win7.md](docs/deploy-win7.md)
+| 你的系统 | 下载 | 内置 Node |
+| --- | --- | --- |
+| Windows 10 / 11（64 位） | `xyzw-win10-x64.zip` | 22 LTS |
+| Windows 7（64 位） | `xyzw-win7-x64.zip` | 12.22.12 |
+| Windows 7（32 位） | `xyzw-win7-x86.zip` | 12.22.12 x86 |
+
+下载地址：<https://github.com/huxinyu190/xyzw_web_helper/releases/latest>
+
+> Windows 7 上跑不了 Node 18+，因此**不能在 Win7 上构建**，只能"别处构建、本机只运行"。
+
+- 运行包源文件：`deploy/portable/`（`server.js` + 启动脚本，零 npm 依赖，Win7 / Win10+ 共用）
+- 自动构建：`.github/workflows/build-portable-package.yml`（Actions 里一键生成三个 zip）
+- 完整步骤与排错：见 [docs/deploy-win7.md](docs/deploy-win7.md)
 
 ### 部署代理服务 (Cloudflare Pages)
 
