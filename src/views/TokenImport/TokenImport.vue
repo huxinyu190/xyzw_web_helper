@@ -210,6 +210,26 @@
             </n-dropdown>
 
             <div
+              class="game-version-box"
+              title="检查官方是否发布了新的游戏客户端版本；发现新版本后可一键切换，新活动需要的资源包才会加载"
+            >
+              <span class="game-version-current">v{{ gameClientVersion }}</span>
+              <n-button
+                :loading="checking"
+                :disabled="checking"
+                @click="openUpdateDialog"
+              >
+                <template #icon>
+                  <NIcon>
+                    <Refresh />
+                  </NIcon>
+                </template>
+                检查更新
+                <span v-if="updateAvailable" class="game-version-dot" />
+              </n-button>
+            </div>
+
+            <div
               class="game-sound-toggle"
               title="关闭后进入游戏会同时关掉音乐、音效、震动、点击特效（含点击音效），单开与批量打开都生效；游戏默认 60 帧、不进入省电模式"
             >
@@ -724,6 +744,140 @@
         </div>
       </template>
     </n-modal>
+
+    <n-modal
+      v-model:show="showUpdateModal"
+      preset="card"
+      class="game-update-modal"
+      :style="{ width: '600px', maxWidth: '92vw' }"
+      title="游戏版本检查"
+      :bordered="false"
+    >
+      <div v-if="checking" class="game-update-loading">
+        <n-spin size="medium" />
+        <p>正在向官方查询可用版本，约 5~15 秒…</p>
+      </div>
+
+      <div v-else-if="checkError" class="game-update-error">
+        <NAlert type="error" :bordered="false">{{ checkError }}</NAlert>
+        <n-button size="small" @click="runCheck">重试</n-button>
+      </div>
+
+      <div v-else-if="updateResult" class="game-update-body">
+        <div class="game-update-versions">
+          <div class="game-update-version">
+            <span class="label">当前使用</span>
+            <span class="value">v{{ updateResult.currentVersion }}</span>
+          </div>
+          <span class="arrow">→</span>
+          <div
+            class="game-update-version"
+            :class="{ latest: updateResult.hasUpdate }"
+          >
+            <span class="label">官方最新</span>
+            <span class="value">
+              {{
+                updateResult.latestVersion
+                  ? `v${updateResult.latestVersion}`
+                  : "-"
+              }}
+            </span>
+          </div>
+        </div>
+
+        <div class="game-update-meta">
+          <span>
+            资源包：{{ updateResult.currentBundleCount }} →
+            {{ updateResult.latestBundleCount }}
+          </span>
+          <span v-if="updateResult.dataVers">
+            数据版本：{{ updateResult.dataVers }}
+          </span>
+        </div>
+
+        <NAlert
+          v-if="updateResult.currentInvalid"
+          type="warning"
+          :bordered="false"
+        >
+          当前版本
+          {{ updateResult.currentVersion }} 已从官方下线，建议立即更新，
+          否则部分内容会加载失败。
+        </NAlert>
+
+        <template v-if="updateResult.hasUpdate">
+          <p class="game-update-note">
+            发现新版本：新增
+            {{ updateResult.bundles?.addedCount || 0 }} 个资源包<span
+              v-if="updateResult.bundles?.changedCount"
+            >
+              、更新 {{ updateResult.bundles.changedCount }} 个</span
+            >。新活动通常就在新增包里。
+          </p>
+          <ul
+            v-if="updateResult.bundles?.added?.length"
+            class="game-update-list"
+          >
+            <li v-for="bundleName in addedPreview" :key="bundleName">
+              <span class="bundle-name">{{ bundleName }}</span>
+              <span class="bundle-tag">{{ describeBundle(bundleName) }}</span>
+            </li>
+          </ul>
+          <p
+            v-if="
+              (updateResult.bundles?.added?.length || 0) > addedPreview.length
+            "
+            class="game-update-more"
+          >
+            还有
+            {{ updateResult.bundles.added.length - addedPreview.length }}
+            个新增包…
+          </p>
+
+          <n-collapse class="game-update-detail">
+            <n-collapse-item title="查看完整差异" name="diff">
+              <p>
+                新增（{{ updateResult.bundles.addedCount }}）：
+                {{ updateResult.bundles.added.join("、") || "无" }}
+              </p>
+              <p>
+                更新（{{ updateResult.bundles.changedCount }}）：
+                {{ updateResult.bundles.changed.join("、") || "无" }}
+              </p>
+              <p v-if="updateResult.bundles.removedCount">
+                下线（{{ updateResult.bundles.removedCount }}）：
+                {{ updateResult.bundles.removed.join("、") }}
+              </p>
+            </n-collapse-item>
+          </n-collapse>
+        </template>
+
+        <NAlert v-else type="success" :bordered="false">
+          已是最新版本，无需更新。
+        </NAlert>
+      </div>
+
+      <template #footer>
+        <div class="modal-actions">
+          <n-button @click="showUpdateModal = false">关闭</n-button>
+          <n-button
+            v-if="updateResult && !updateResult.hasUpdate"
+            type="primary"
+            @click="rerunCheck"
+          >
+            重新检查
+          </n-button>
+          <n-button
+            v-else
+            type="primary"
+            :disabled="checking || !updateResult?.hasUpdate"
+            @click="applyUpdate"
+          >
+            立即更新
+          </n-button>
+        </div>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -749,6 +903,10 @@ import { NAlert, NIcon, useDialog, useMessage } from "naive-ui";
 import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import AppNav from "@/components/Common/AppNav.vue";
+import {
+  gameClientVersion,
+  useGameVersion,
+} from "@/composables/useGameVersion";
 import useIndexedDB from "@/hooks/useIndexedDB";
 import { $emit } from "@/stores/events/index.ts";
 
@@ -766,6 +924,7 @@ import {
   toggleTokenSelection,
 } from "@/utils/gameSelection";
 import { gameSoundEnabled, setGameSound } from "@/utils/gameSound";
+import { describeBundle } from "@/utils/gameVersion";
 import { scheduleAuthUserRequest, transformToken } from "@/utils/token";
 import {
   generateBinFromCombUser,
@@ -801,6 +960,46 @@ const rateLimitMessage = ref("");
 const showImportForm = ref(false);
 const isImporting = ref(false);
 const showEditModal = ref(false);
+
+/* ---------------- 游戏版本检查 ---------------- */
+const showUpdateModal = ref(false);
+const {
+  checking,
+  errorMessage: checkError,
+  result: updateResult,
+  checkForUpdate,
+  applyLatest,
+} = useGameVersion();
+
+const updateAvailable = computed(() => Boolean(updateResult.value?.hasUpdate));
+const addedPreview = computed(() =>
+  (updateResult.value?.bundles?.added || []).slice(0, 8),
+);
+
+const runCheck = async () => {
+  await checkForUpdate();
+};
+
+const rerunCheck = async () => {
+  updateResult.value = null;
+  await checkForUpdate();
+};
+
+const openUpdateDialog = async () => {
+  showUpdateModal.value = true;
+  await checkForUpdate();
+};
+
+const applyUpdate = () => {
+  const version = updateResult.value?.latestVersion;
+  if (!applyLatest()) {
+    message.warning("没有可更新的版本");
+    return;
+  }
+  message.success(`已切换到 v${version}，正在重新加载游戏`);
+  showUpdateModal.value = false;
+  updateResult.value = null;
+};
 
 const editFormRef = ref(null);
 const editingToken = ref(null);
@@ -2281,6 +2480,155 @@ onUnmounted(() => {
   color: var(--text-secondary);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.game-version-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.game-version-current {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.game-version-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #e54d42;
+  vertical-align: middle;
+}
+
+.game-update-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.game-update-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.game-update-versions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.game-update-version {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+}
+
+.game-update-version .label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.game-update-version .value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-update-version.latest {
+  background: rgba(24, 160, 88, 0.12);
+}
+
+.game-update-version.latest .value {
+  color: #18a058;
+}
+
+.game-update-versions .arrow {
+  color: var(--text-tertiary);
+}
+
+.game-update-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.game-update-note {
+  margin: 12px 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.game-update-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  margin: 0 0 8px;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.game-update-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  font-size: 12px;
+}
+
+.game-update-list .bundle-name {
+  color: var(--text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.game-update-list .bundle-tag {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.game-update-more {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.game-update-detail p {
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  line-height: 1.6;
 }
 
 .header-actions {

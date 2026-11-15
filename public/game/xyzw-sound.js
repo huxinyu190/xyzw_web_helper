@@ -54,6 +54,24 @@
     return value !== "false" && value !== "0";
   }
 
+  /*
+   * 游戏客户端版本
+   *
+   * 主站「检查更新」会把选定的版本写进 localStorage["xyzw:gameClientVersion"]，
+   * 游戏启动时按这个版本向官方请求资源清单。多开页会按账号隔离 localStorage，
+   * 所以在 bridge 安装前先把值读出来挂到 window 上，main.js 直接用它。
+   */
+  var VERSION_KEY = "xyzw:gameClientVersion";
+  var DEFAULT_VERSION = "0.32.0";
+  var VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+
+  function readClientVersion() {
+    var value = readStored(VERSION_KEY);
+    return VERSION_PATTERN.test(value || "") ? value : DEFAULT_VERSION;
+  }
+
+  window.__XYZW_CLIENT_VERSION__ = readClientVersion();
+
   /** 性能档位：默认 high（60 帧、不省电）；写 "auto" 可恢复游戏自身设置 */
   function isHighPerformance() {
     var value = readStored(PERF_KEY);
@@ -303,6 +321,13 @@
     if (event.data && event.data.type === "xyzw:sound") {
       forced = Boolean(event.data.enabled);
       apply();
+      return;
+    }
+    if (event.data && event.data.type === "xyzw:version") {
+      var version = String(event.data.version || "");
+      if (VERSION_PATTERN.test(version)) {
+        window.__XYZW_CLIENT_VERSION__ = version;
+      }
     }
   });
 

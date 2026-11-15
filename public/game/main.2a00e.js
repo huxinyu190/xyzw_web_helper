@@ -363,8 +363,22 @@ window.parseRemoteBundleVers = function (settingsObj) {
   return bundleVers
 }
 
+window.getClientVersion = function () {
+  var pattern = /^\d+\.\d+\.\d+$/
+  var version = window.__XYZW_CLIENT_VERSION__
+  if (!pattern.test(version || '')) {
+    try {
+      version = window.localStorage.getItem('xyzw:gameClientVersion')
+    } catch (err) {
+      version = null
+    }
+  }
+  return pattern.test(version || '') ? version : '0.32.0'
+}
+
 window.loadRemoteBundleVers = async function () {
-  const manifestUrl = `https://xxz-xyzw.hortorgames.com/login/manifest?platform=hortor&version=0.32.0-android`
+  const clientVersion = window.getClientVersion()
+  const manifestUrl = `https://xxz-xyzw.hortorgames.com/login/manifest?platform=hortor&version=${clientVersion}-android`
   console.log('[remoteAssets] POST manifest', manifestUrl)
 
   const settingsRes = await fetch(
@@ -395,6 +409,7 @@ window.loadRemoteBundleVers = async function () {
   const bundleVers = window.parseRemoteBundleVers(settingsObj)
   Object.assign(window._CCSettings.bundleVers, bundleVers)
   console.log('[remoteAssets] 远程版本已拉取', {
+    clientVersion: clientVersion,
     launcher: bundleVers.launcher,
     game: bundleVers.game,
     COMMIT_ID: bundleVers.COMMIT_ID

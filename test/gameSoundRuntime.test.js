@@ -230,3 +230,28 @@ test("写 xyzw:gamePerf=auto 可恢复游戏自身的省电/帧率设置", () =>
   assert.equal(runtime.game.config.frameRate, 30);
   assert.deepEqual(runtime.calls.setFrameRate, []);
 });
+
+test("游戏客户端版本：默认 0.32.0，可从隔离存储读取", () => {
+  const fallback = createRuntime();
+  assert.equal(fallback.window.__XYZW_CLIENT_VERSION__, "0.32.0");
+
+  const custom = createRuntime({ "xyzw:gameClientVersion": "0.37.0" });
+  assert.equal(custom.window.__XYZW_CLIENT_VERSION__, "0.37.0");
+
+  const invalid = createRuntime({ "xyzw:gameClientVersion": "v0.37" });
+  assert.equal(invalid.window.__XYZW_CLIENT_VERSION__, "0.32.0");
+});
+
+test("主站切换版本后通过 postMessage 同步到游戏页", () => {
+  const runtime = createRuntime();
+  runtime.emit("message", {
+    data: { type: "xyzw:version", version: "0.36.0" },
+  });
+  assert.equal(runtime.window.__XYZW_CLIENT_VERSION__, "0.36.0");
+
+  // 非法版本不接受
+  runtime.emit("message", {
+    data: { type: "xyzw:version", version: "latest" },
+  });
+  assert.equal(runtime.window.__XYZW_CLIENT_VERSION__, "0.36.0");
+});

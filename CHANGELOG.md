@@ -1,5 +1,15 @@
 # 更新日志
 
+## [未发布]
+
+### ✨ 新增功能
+- **游戏版本检查与更新**：Token 管理页新增「检查更新」按钮，探测官方可用客户端版本（实测 0.32.0 → 0.37.0），列出新增资源包并一键切换；新活动所需的资源包才会被加载，单开/批量打开/Win7 运行包都生效。
+
+### 🛠️ 技术改进
+- 游戏启动不再写死 `version=0.32.0-android`：`public/game/main.2a00e.js` 改为读取 `window.__XYZW_CLIENT_VERSION__`（由 `xyzw-sound.js` 在存储隔离前注入），支持主站 `postMessage` 实时同步。
+- 新增 `src/utils/gameVersion.js`、`src/composables/useGameVersion.js` 与 9 项单测，覆盖版本比较、探测、清单解析、包差异与失效版本回退。
+- 文档：新增 `docs/game-version-update.md` 记录成因、官方版本表与排错。
+
 ## [2.1.0] - 2026-11-09
 
 ### ✨ 新增功能
