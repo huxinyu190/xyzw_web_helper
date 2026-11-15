@@ -65,13 +65,19 @@ export function compareVersions(a, b) {
  */
 export function buildProbeVersions(
   current,
-  { minorSpan = 12, majorCandidates = [1, 2] } = {},
+  { minorSpan = 12, minorBack = 6, majorCandidates = [1, 2] } = {},
 ) {
   const base =
     parseVersion(current) || parseVersion(DEFAULT_GAME_CLIENT_VERSION);
   const versions = [];
-  for (let step = 1; step <= minorSpan; step += 1) {
-    versions.push(`${base.major}.${base.minor + step}.0`);
+  // 既要往后探（官方发新版本），也要往回探：
+  // 可能出现“清单版本更高、codeVersion 反而更旧”的分支版本（如 0.37.0），
+  // 此时必须能找回 0.36.0 这类与游戏版本匹配的清单。
+  for (let step = -minorBack; step <= minorSpan; step += 1) {
+    if (step === 0) continue;
+    const minor = base.minor + step;
+    if (minor < 0) continue;
+    versions.push(`${base.major}.${minor}.0`);
   }
   for (const major of majorCandidates) {
     if (major > base.major) versions.push(`${major}.0.0`);
@@ -213,10 +219,6 @@ export function describeBundle(name) {
 
 /**
  * 把检查结果整理成 UI 需要的结构
- * @param {{current: string, currentManifest: object|null, latest: object|null}} input
- */
-/**
- * 把检查结果整理成 UI 需要的结构
  * @param {{currentCodeVersion: string, currentClientVersion: string, currentManifest: object|null, latest: {version: string, manifest: object}|null}} input 检查输入
  * @returns {object} 版本对比结论
  */
@@ -240,6 +242,8 @@ export function buildUpdateSummary({
       hasUpdate: false,
       codeChanged: false,
       currentInvalid: false,
+      clientMismatch: false,
+      currentManifestCode: "",
       bundles: null,
       currentBundleCount: currentManifest?.bundleCount || 0,
       latestBundleCount: 0,
@@ -265,6 +269,14 @@ export function buildUpdateSummary({
   // 当前清单拿不到（版本被官方下线）时必须允许切换
   const currentInvalid = !currentManifest || !currentManifest.ok;
 
+  // 当前清单里的 codeVersion 与本地游戏版本不一致 → 游戏会弹“版本不一致”
+  const currentManifestCode =
+    normalizeVersion(currentManifest?.codeVersion) || "";
+  const clientMismatch = Boolean(
+    currentManifestCode &&
+    compareVersions(currentManifestCode, currentVersion) !== 0,
+  );
+
   return {
     currentVersion,
     latestVersion,
@@ -274,9 +286,12 @@ export function buildUpdateSummary({
       codeChanged ||
       contentChanged ||
       currentInvalid ||
+      clientMismatch ||
       compareVersions(latestClient, currentClient) !== 0,
     codeChanged,
     currentInvalid,
+    clientMismatch,
+    currentManifestCode,
     bundles,
     currentBundleCount: currentManifest?.bundleCount || 0,
     latestBundleCount: latest.manifest.bundleCount,

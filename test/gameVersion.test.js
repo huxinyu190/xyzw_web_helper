@@ -35,10 +35,20 @@ test("版本号解析与比较", () => {
   assert.ok(compareVersions("2.54.2", "2.54.10") < 0);
 });
 
-test("探测列表覆盖后续小版本与下一大版本", () => {
-  const list = buildProbeVersions("0.36.0", { minorSpan: 3 });
-  assert.deepEqual(list, ["0.37.0", "0.38.0", "0.39.0", "1.0.0", "2.0.0"]);
+test("探测列表前后都要探：向前找新版本，向后找回匹配清单", () => {
+  const list = buildProbeVersions("0.36.0", { minorSpan: 3, minorBack: 2 });
+  assert.deepEqual(list, [
+    "0.34.0",
+    "0.35.0",
+    "0.37.0",
+    "0.38.0",
+    "0.39.0",
+    "1.0.0",
+    "2.0.0",
+  ]);
   assert.ok(!list.includes("0.36.0"));
+  // 小版本不为负
+  assert.ok(!buildProbeVersions("0.2.0", { minorBack: 6 }).includes("0.-4.0"));
 });
 
 test("清单地址带版本与平台参数", () => {
@@ -243,4 +253,38 @@ test("游戏页使用注入的版本，而不是写死旧版本", () => {
   assert.match(defines, /__XYZW_GAME_VERSION__/);
   assert.doesNotMatch(defines, /GAME_VERSION = '1\.89\.8-wx'/);
   assert.doesNotMatch(defines, /CODE_VERSION = '1\.89\.8'/);
+});
+
+test("当前清单停在 0.37.0 时，仍能找回 0.36.0 / 2.54.2 并提示切换", () => {
+  const results = [
+    {
+      version: "0.35.0",
+      manifest: manifestOf({ game: "b", codeVersion: "2.45.2" }),
+    },
+    {
+      version: "0.36.0",
+      manifest: manifestOf({ game: "c", codeVersion: "2.54.2" }),
+    },
+    {
+      version: "0.37.0",
+      manifest: manifestOf({ game: "d", codeVersion: "0.37.0" }),
+    },
+    { version: "0.38.0", manifest: null },
+  ];
+  const latest = pickLatestVersion(results);
+  assert.equal(latest.version, "0.36.0");
+  assert.equal(latest.manifest.codeVersion, "2.54.2");
+
+  // 本地已经是 2.54.2，但清单停在 0.37.0（codeVersion 0.37.0）→ 属于版本不一致
+  const summary = buildUpdateSummary({
+    currentCodeVersion: "2.54.2",
+    currentClientVersion: "0.37.0",
+    currentManifest: manifestOf({ game: "d", codeVersion: "0.37.0" }),
+    latest,
+  });
+  assert.equal(summary.clientMismatch, true);
+  assert.equal(summary.hasUpdate, true);
+  assert.equal(summary.currentManifestCode, "0.37.0");
+  assert.equal(summary.latestClientVersion, "0.36.0");
+  assert.equal(summary.latestVersion, "2.54.2");
 });

@@ -789,6 +789,19 @@
           <span>
             资源清单：{{ updateResult.currentClientVersion }} →
             {{ updateResult.latestClientVersion || "-" }}
+            <template
+              v-if="
+                updateResult.latestClientVersion &&
+                updateResult.latestClientVersion !==
+                  updateResult.currentClientVersion &&
+                compareVersionStrings(
+                  updateResult.latestClientVersion,
+                  updateResult.currentClientVersion,
+                ) < 0
+              "
+            >
+              （回退到与游戏版本匹配的清单）
+            </template>
           </span>
           <span>
             资源包：{{ updateResult.currentBundleCount }} →
@@ -807,6 +820,18 @@
           当前版本
           {{ updateResult.currentVersion }} 已从官方下线，建议立即更新，
           否则部分内容会加载失败。
+        </NAlert>
+
+        <NAlert
+          v-else-if="updateResult.clientMismatch"
+          type="warning"
+          :bordered="false"
+        >
+          资源清单 {{ updateResult.currentClientVersion }} 里标记的游戏版本是
+          {{ updateResult.currentManifestCode }}，与本地
+          {{ updateResult.currentVersion }} 不一致，游戏会提示「版本不一致」。
+          建议切换到 {{ updateResult.latestClientVersion }} /
+          {{ updateResult.latestVersion }}。
         </NAlert>
 
         <template v-if="updateResult.hasUpdate">
@@ -929,7 +954,10 @@ import {
   toggleTokenSelection,
 } from "@/utils/gameSelection";
 import { gameSoundEnabled, setGameSound } from "@/utils/gameSound";
-import { describeBundle } from "@/utils/gameVersion";
+import {
+  compareVersions as compareVersionStrings,
+  describeBundle,
+} from "@/utils/gameVersion";
 import { scheduleAuthUserRequest, transformToken } from "@/utils/token";
 import {
   generateBinFromCombUser,
