@@ -60,54 +60,100 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem | Out-Null
 
-          if (-not (Test-Path "dist/index.html")) { throw "dist/index.html 不存在，构建失败" }
-
-          # 内置的便携 Node：Win7 用 12，Win10+ 用 22 LTS
-          $targets = @(
-            @{ Name = "win7-x64";  NodeVersion = "12.22.12"; Arch = "x64" },
-            @{ Name = "win7-x86";  NodeVersion = "12.22.12"; Arch = "x86" },
-            @{ Name = "win10-x64"; NodeVersion = "22.23.5";  Arch = "x64" }
-          )
-
-          $commonFiles = @(
-            "server.js", "package.json", "README.txt",
-            "run.vbs", "start.bat", "start-lan.bat", "stop.bat", "open.bat", "start-hidden.vbs"
-          )
-
-          New-Item -ItemType Directory -Force -Path out | Out-Null
-
-          foreach ($target in $targets) {
-            $ver = $target.NodeVersion
-            $arch = $target.Arch
-            $dir = "node-v$ver-win-$arch"
-            $zipName = "node-$ver-$arch.zip"
-
-            if (-not (Test-Path $zipName)) {
-              Invoke-WebRequest -Uri "https://nodejs.org/dist/v$ver/$zipName" -OutFile $zipName
-              Expand-Archive -Path $zipName -DestinationPath "node-$ver-$arch"
-            }
-
-            $pkg = "out/xyzw-$($target.Name)/xyzw"
-            New-Item -ItemType Directory -Force -Path "$pkg/web", "$pkg/node" | Out-Null
-
-            Copy-Item -Recurse -Force "dist/*" "$pkg/web/"
-            foreach ($file in $commonFiles) {
-              Copy-Item -Force "deploy/portable/$file" "$pkg/"
-            }
-            Copy-Item -Recurse -Force "$dir/*" "$pkg/node/"
-
-            # 包内自检：缺文件就别发出去
-            if (-not (Test-Path "$pkg/node/node.exe")) { throw "$($target.Name): node.exe 缺失" }
-            if (-not (Test-Path "$pkg/web/index.html")) { throw "$($target.Name): web/index.html 缺失" }
-
-            Compress-Archive -Path "$pkg/*" -DestinationPath "out/xyzw-$($target.Name).zip" -Force
-            $size = [math]::Round((Get-Item "out/xyzw-$($target.Name).zip").Length / 1MB, 1)
-            Write-Host "已生成 out/xyzw-$($target.Name).zip ($size MB)"
+          # 失败时把原因写进检查注解，Actions 页面与 API 都能直接看到
+          function Fail($message) {
+            Write-Host "::error title=打包失败::$message"
+            throw $message
           }
 
-          Get-ChildItem out/*.zip | ForEach-Object {
-            "{0}  {1} MB" -f $_.Name, [math]::Round($_.Length / 1MB, 1)
+          try {
+            if (-not (Test-Path "dist/index.html")) { Fail "dist/index.html 不存在，构建可能失败了" }
+
+            # 内置的便携 Node：Win7 用 12（最后支持 Win7 的版本），Win10+ 用 22 LTS
+            $targets = @(
+              @{ Name = "win7-x64";  NodeVersion = "12.22.12"; Arch = "x64" },
+              @{ Name = "win7-x86";  NodeVersion = "12.22.12"; Arch = "x86" },
+              @{ Name = "win10-x64"; NodeVersion = "22.23.5";  Arch = "x64" }
+            )
+            $commonFiles = @(
+              "server.js", "package.json", "README.txt",
+              "run.vbs", "start.bat", "start-lan.bat", "stop.bat", "open.bat", "start-hidden.vbs"
+            )
+
+            $cwd = (Get-Location).Path
+            New-Item -ItemType Directory -Force -Path "out" | Out-Null
+
+            foreach ($t in $targets) {
+              $name = $t.Name
+              $ver = $t.NodeVersion
+              $arch = $t.Arch
+              $nodeDir = Join-Path $cwd "node-v$ver-win-$arch"
+              $nodeZip = "node-$ver-$arch.zip"
+              Write-Host "== 准备 $name（Node $ver $arch）"
+
+              if (-not (Test-Path $nodeDir)) {
+                if (-not (Test-Path $nodeZip)) {
+                  $url = "https://nodejs.org/dist/v$ver/$nodeZip"
+                  Write-Host "   下载 $url"
+                  & curl.exe -fL --retry 3 --retry-delay 3 --max-time 900 -o $nodeZip $url
+                  if ($LASTEXITCODE -ne 0) { Fail "下载 $url 失败（curl exit $LASTEXITCODE）" }
+                }
+                New-Item -ItemType Directory -Force -Path $nodeDir | Out-Null
+                Write-Host "   解压 $nodeZip"
+                try {
+                  [System.IO.Compression.ZipFile]::ExtractToDirectory((Join-Path $cwd $nodeZip), $nodeDir)
+                } catch {
+                  Fail "解压 $nodeZip 失败：$($_.Exception.Message)"
+                }
+              }
+
+              $pkg = Join-Path $cwd "out/xyzw-$name/xyzw"
+              New-Item -ItemType Directory -Force -Path (Join-Path $pkg "web") | Out-Null
+              New-Item -ItemType Directory -Force -Path (Join-Path $pkg "node") | Out-Null
+
+              Write-Host "   复制前端产物"
+              Copy-Item -Recurse -Force "dist/*" (Join-Path $pkg "web")
+
+              Write-Host "   复制启动脚本"
+              foreach ($file in $commonFiles) {
+                $src = "deploy/portable/$file"
+                if (-not (Test-Path $src)) { Fail "缺少部署文件 $src" }
+                Copy-Item -Force $src (Join-Path $pkg $file)
+              }
+
+              Write-Host "   复制便携 Node"
+              Copy-Item -Recurse -Force (Join-Path $nodeDir "*") (Join-Path $pkg "node")
+
+              if (-not (Test-Path (Join-Path $pkg "node/node.exe"))) { Fail "$name：node/node.exe 缺失" }
+              if (-not (Test-Path (Join-Path $pkg "web/index.html"))) { Fail "$name：web/index.html 缺失" }
+
+              $zipPath = Join-Path $cwd "out/xyzw-$name.zip"
+              if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+              Write-Host "   压缩 -> out/xyzw-$name.zip"
+              try {
+                [System.IO.Compression.ZipFile]::CreateFromDirectory(
+                  $pkg,
+                  $zipPath,
+                  [System.IO.Compression.CompressionLevel]::Optimal,
+                  $false
+                )
+              } catch {
+                Fail "压缩 $name 失败：$($_.Exception.Message)"
+              }
+
+              $size = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+              Write-Host "   已生成 out/xyzw-$name.zip（$size MB）"
+            }
+
+            Write-Host "== 全部完成"
+            Get-ChildItem "out/*.zip" | ForEach-Object {
+              Write-Host ("   {0}  {1} MB" -f $_.Name, [math]::Round($_.Length / 1MB, 1))
+            }
+          } catch {
+            Write-Host "::error title=打包失败::$($_.Exception.Message)"
+            exit 1
           }
 
       - name: 上传 Win7 x64
