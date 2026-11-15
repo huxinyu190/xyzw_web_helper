@@ -62,15 +62,28 @@
    * 所以在 bridge 安装前先把值读出来挂到 window 上，main.js 直接用它。
    */
   var VERSION_KEY = "xyzw:gameClientVersion";
-  var DEFAULT_VERSION = "0.32.0";
+  var GAME_VERSION_KEY = "xyzw:gameVersion";
+  var DEFAULT_VERSION = "0.36.0";
+  var DEFAULT_GAME_VERSION = "2.54.2";
   var VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
 
-  function readClientVersion() {
-    var value = readStored(VERSION_KEY);
-    return VERSION_PATTERN.test(value || "") ? value : DEFAULT_VERSION;
+  function readVersion(key, fallback) {
+    var value = readStored(key);
+    return VERSION_PATTERN.test(value || "") ? value : fallback;
   }
 
+  function readClientVersion() {
+    return readVersion(VERSION_KEY, DEFAULT_VERSION);
+  }
+
+  function readGameVersion() {
+    return readVersion(GAME_VERSION_KEY, DEFAULT_GAME_VERSION);
+  }
+
+  // 资源清单版本（决定请求哪份 bundleVers）
   window.__XYZW_CLIENT_VERSION__ = readClientVersion();
+  // 游戏代码版本（game-defines 里的 CODE_VERSION / GAME_VERSION）
+  window.__XYZW_GAME_VERSION__ = readGameVersion();
 
   /** 性能档位：默认 high（60 帧、不省电）；写 "auto" 可恢复游戏自身设置 */
   function isHighPerformance() {
@@ -325,8 +338,12 @@
     }
     if (event.data && event.data.type === "xyzw:version") {
       var version = String(event.data.version || "");
+      var gameVersion = String(event.data.gameVersion || "");
       if (VERSION_PATTERN.test(version)) {
         window.__XYZW_CLIENT_VERSION__ = version;
+      }
+      if (VERSION_PATTERN.test(gameVersion)) {
+        window.__XYZW_GAME_VERSION__ = gameVersion;
       }
     }
   });

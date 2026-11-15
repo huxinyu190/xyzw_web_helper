@@ -16,8 +16,14 @@ export const GAME_CLIENT_VERSION_KEY = "xyzw:gameClientVersion";
 /** localStorage：上次检查结果（用于回显） */
 export const GAME_VERSION_INFO_KEY = "xyzw:gameVersionInfo";
 
-/** 与 public/game/main.2a00e.js 里的兜底值保持一致 */
-export const DEFAULT_GAME_CLIENT_VERSION = "0.32.0";
+/** 资源清单用的客户端版本（决定请求哪一份 bundleVers） */
+export const DEFAULT_GAME_CLIENT_VERSION = "0.36.0";
+
+/** 游戏代码版本（game-defines 里的 CODE_VERSION，形如 2.54.2） */
+export const DEFAULT_GAME_CODE_VERSION = "2.54.2";
+
+/** localStorage：游戏代码版本 */
+export const GAME_CODE_VERSION_KEY = "xyzw:gameVersion";
 
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/;
 
@@ -92,6 +98,7 @@ export function parseManifest(payload) {
     game: "",
     launcher: "",
     commitId: "",
+    codeVersion: "",
     dataVers: "",
     bundles: null,
   };
@@ -119,6 +126,9 @@ export function parseManifest(payload) {
     game: typeof bundles.game === "string" ? bundles.game : "",
     launcher: typeof bundles.launcher === "string" ? bundles.launcher : "",
     commitId: typeof bundles.COMMIT_ID === "string" ? bundles.COMMIT_ID : "",
+    // 官方用它判断客户端是否最新（game-defines 的 CODE_VERSION 要与之相等）
+    codeVersion:
+      typeof bundles.codeVersion === "string" ? bundles.codeVersion : "",
     dataVers: typeof body.dataVers === "string" ? body.dataVers : "",
     bundles,
   };
@@ -130,12 +140,36 @@ export function parseManifest(payload) {
  */
 export function pickLatestVersion(results) {
   let best = null;
+  let bestByFallback = null;
+  const valid = [];
+
   for (const item of results || []) {
     if (!item || !item.manifest || !item.manifest.ok) continue;
-    if (!parseVersion(item.version)) continue;
-    if (!best || compareVersions(item.version, best.version) > 0) best = item;
+    valid.push(item);
   }
-  return best;
+
+  // 以清单里的 codeVersion 为准：客户端版本号高不代表游戏版本新
+  // （实测 0.37.0 的 codeVersion 反而是 0.37.0，而 0.36.0 是 2.54.2）
+  for (const item of valid) {
+    const codeVersion = normalizeVersion(item.manifest.codeVersion);
+    if (!codeVersion) continue;
+    if (!best || compareVersions(codeVersion, best.manifest.codeVersion) > 0) {
+      best = item;
+    }
+  }
+  if (best) return best;
+
+  // 所有清单都没有 codeVersion 时，退回按客户端版本比较
+  for (const item of valid) {
+    if (!parseVersion(item.version)) continue;
+    if (
+      !bestByFallback ||
+      compareVersions(item.version, bestByFallback.version) > 0
+    ) {
+      bestByFallback = item;
+    }
+  }
+  return bestByFallback;
 }
 
 /** 对比两份清单的资源包差异 */
@@ -181,14 +215,30 @@ export function describeBundle(name) {
  * 把检查结果整理成 UI 需要的结构
  * @param {{current: string, currentManifest: object|null, latest: object|null}} input
  */
-export function buildUpdateSummary({ current, currentManifest, latest }) {
+/**
+ * 把检查结果整理成 UI 需要的结构
+ * @param {{currentCodeVersion: string, currentClientVersion: string, currentManifest: object|null, latest: {version: string, manifest: object}|null}} input 检查输入
+ * @returns {object} 版本对比结论
+ */
+export function buildUpdateSummary({
+  currentCodeVersion,
+  currentClientVersion,
+  currentManifest,
+  latest,
+}) {
   const currentVersion =
-    normalizeVersion(current) || DEFAULT_GAME_CLIENT_VERSION;
+    normalizeVersion(currentCodeVersion) || DEFAULT_GAME_CODE_VERSION;
+  const currentClient =
+    normalizeVersion(currentClientVersion) || DEFAULT_GAME_CLIENT_VERSION;
+
   if (!latest || !latest.manifest || !latest.manifest.ok) {
     return {
       currentVersion,
       latestVersion: "",
+      currentClientVersion: currentClient,
+      latestClientVersion: "",
       hasUpdate: false,
+      codeChanged: false,
       currentInvalid: false,
       bundles: null,
       currentBundleCount: currentManifest?.bundleCount || 0,
@@ -196,27 +246,36 @@ export function buildUpdateSummary({ current, currentManifest, latest }) {
     };
   }
 
-  const latestVersion = latest.version;
+  const latestVersion =
+    normalizeVersion(latest.manifest.codeVersion) || currentVersion;
+  const latestClient = normalizeVersion(latest.version) || currentClient;
+
   const bundles =
     currentManifest && currentManifest.ok
       ? diffBundles(currentManifest.bundles, latest.manifest.bundles)
       : null;
 
-  const versionChanged = compareVersions(latestVersion, currentVersion) > 0;
+  const codeChanged = compareVersions(latestVersion, currentVersion) > 0;
   const contentChanged = Boolean(
     bundles &&
     (bundles.addedCount > 0 ||
       bundles.changedCount > 0 ||
       bundles.removedCount > 0),
   );
-
-  // 当前版本已被官方下线时，即使版本号更高也要切回可用版本
+  // 当前清单拿不到（版本被官方下线）时必须允许切换
   const currentInvalid = !currentManifest || !currentManifest.ok;
 
   return {
     currentVersion,
     latestVersion,
-    hasUpdate: versionChanged || contentChanged || currentInvalid,
+    currentClientVersion: currentClient,
+    latestClientVersion: latestClient,
+    hasUpdate:
+      codeChanged ||
+      contentChanged ||
+      currentInvalid ||
+      compareVersions(latestClient, currentClient) !== 0,
+    codeChanged,
     currentInvalid,
     bundles,
     currentBundleCount: currentManifest?.bundleCount || 0,

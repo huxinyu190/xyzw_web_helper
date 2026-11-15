@@ -10,8 +10,12 @@ gt.CDN = 'https://xxz-xyzw-res.hortorgames.com'
 gt.SERVER = 'https://xxz-xyzw.hortorgames.com'
 gt.GAME_NAME = '咸鱼之王'
 gt.GAME_ID = 'xyzw_mix'
-gt.GAME_VERSION = '1.89.8-wx'
-gt.CODE_VERSION = '1.89.8'
+// 版本号由主站「检查更新」注入（见 public/game/xyzw-sound.js）。
+// CODE_VERSION 必须与官方资源清单里的 codeVersion 一致，否则游戏会判定
+// 「版本不一致」并强制重启，新活动也会被锁。
+gt.CODE_VERSION =
+  (typeof window === 'object' && window.__XYZW_GAME_VERSION__) || '2.54.2'
+gt.GAME_VERSION = /-/.test(gt.CODE_VERSION) ? gt.CODE_VERSION : gt.CODE_VERSION + '-wx'
 gt.COMMIT_ID = ''
 gt.CONFIG_COMMIT_ID = ''
 gt.RESOURCES_COMMIT_ID = ''

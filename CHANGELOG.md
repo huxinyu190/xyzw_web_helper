@@ -3,12 +3,14 @@
 ## [未发布]
 
 ### ✨ 新增功能
-- **游戏版本检查与更新**：Token 管理页新增「检查更新」按钮，探测官方可用客户端版本（实测 0.32.0 → 0.37.0），列出新增资源包并一键切换；新活动所需的资源包才会被加载，单开/批量打开/Win7 运行包都生效。
+- **游戏版本检查与更新**：Token 管理页新增「检查更新」按钮，按官方清单里的 `codeVersion` 判定最新游戏版本（实测当前为 **2.54.2**，对应资源清单 0.36.0），列出新增资源包并一键切换；更新后新活动的资源才会加载。
 
 ### 🛠️ 技术改进
-- 游戏启动不再写死 `version=0.32.0-android`：`public/game/main.2a00e.js` 改为读取 `window.__XYZW_CLIENT_VERSION__`（由 `xyzw-sound.js` 在存储隔离前注入），支持主站 `postMessage` 实时同步。
-- 新增 `src/utils/gameVersion.js`、`src/composables/useGameVersion.js` 与 9 项单测，覆盖版本比较、探测、清单解析、包差异与失效版本回退。
-- 文档：新增 `docs/game-version-update.md` 记录成因、官方版本表与排错。
+- 修正版本口径：游戏版本看 `bundleVers.codeVersion`，不能按清单版本号排序（0.37.0 的 codeVersion 反而是 0.37.0，0.36.0 才是 2.54.2）。
+- 游戏启动不再写死版本：`main.2a00e.js` 读取 `window.__XYZW_CLIENT_VERSION__`，`game-defines.a175e.js` 读取 `window.__XYZW_GAME_VERSION__`（由 `xyzw-sound.js` 在存储隔离前注入，兼容多开），支持 `postMessage` 实时同步。
+- 版本成对保存（清单版本 + 代码版本），老数据自动迁移到 0.36.0 / 2.54.2，避免 `CODE_VERSION` 与清单 `codeVersion` 不一致触发「请重启」。
+- 新增 `src/utils/gameVersion.js`、`src/composables/useGameVersion.js` 与 9 项单测。
+- 文档：`docs/game-version-update.md` 记录两个版本号的区别、官方版本表与排错。
 
 ## [2.1.0] - 2026-11-09
 

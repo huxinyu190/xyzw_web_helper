@@ -211,9 +211,9 @@
 
             <div
               class="game-version-box"
-              title="检查官方是否发布了新的游戏客户端版本；发现新版本后可一键切换，新活动需要的资源包才会加载"
+              :title="`当前游戏版本 v${gameCodeVersion}（资源清单 ${gameClientVersion}）——检查官方是否发布了新版本，发现后可一键更新`"
             >
-              <span class="game-version-current">v{{ gameClientVersion }}</span>
+              <span class="game-version-current">v{{ gameCodeVersion }}</span>
               <n-button
                 :loading="checking"
                 :disabled="checking"
@@ -766,7 +766,7 @@
       <div v-else-if="updateResult" class="game-update-body">
         <div class="game-update-versions">
           <div class="game-update-version">
-            <span class="label">当前使用</span>
+            <span class="label">当前游戏版本</span>
             <span class="value">v{{ updateResult.currentVersion }}</span>
           </div>
           <span class="arrow">→</span>
@@ -774,7 +774,7 @@
             class="game-update-version"
             :class="{ latest: updateResult.hasUpdate }"
           >
-            <span class="label">官方最新</span>
+            <span class="label">官方最新版本</span>
             <span class="value">
               {{
                 updateResult.latestVersion
@@ -786,6 +786,10 @@
         </div>
 
         <div class="game-update-meta">
+          <span>
+            资源清单：{{ updateResult.currentClientVersion }} →
+            {{ updateResult.latestClientVersion || "-" }}
+          </span>
           <span>
             资源包：{{ updateResult.currentBundleCount }} →
             {{ updateResult.latestBundleCount }}
@@ -905,6 +909,7 @@ import { useRouter } from "vue-router";
 import AppNav from "@/components/Common/AppNav.vue";
 import {
   gameClientVersion,
+  gameCodeVersion,
   useGameVersion,
 } from "@/composables/useGameVersion";
 import useIndexedDB from "@/hooks/useIndexedDB";
