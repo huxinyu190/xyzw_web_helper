@@ -90,7 +90,7 @@ jobs:
               $ver = $t.NodeVersion
               $arch = $t.Arch
               $nodeDir = Join-Path $cwd "node-v$ver-win-$arch"
-              $nodeZip = "node-$ver-$arch.zip"
+              $nodeZip = "node-v$ver-win-$arch.zip"
               Write-Host "== 准备 $name（Node $ver $arch）"
 
               if (-not (Test-Path $nodeDir)) {
