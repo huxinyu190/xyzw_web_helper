@@ -58,7 +58,7 @@ function readVersion() {
   } catch (error) {
     /* 读不到就用兜底值 */
   }
-  return "2.2.0";
+  return "2.2.1";
 }
 const VERSION = readVersion();
 

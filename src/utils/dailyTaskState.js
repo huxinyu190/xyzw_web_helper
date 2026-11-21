@@ -1,6 +1,16 @@
 const configsByVersion = new Map();
 const activeTokenRuns = new Set();
 
+/** 官方静态资源配置根地址 */
+const DATA_CDN = "https://xxz-xyzw-res.hortorgames.com";
+/** 服务器下发的「任务配置版本 -> 实际可读的版本」映射（官方会清理旧版本目录） */
+const resolvedVersionByServer = new Map();
+/** 官方 data/version.json 公布的当前版本（进程内缓存，失败不缓存） */
+let publishedVersion = null;
+/** config.json 约 15 MB，慢网下 30 秒容易超时 */
+const CONFIG_TIMEOUT_MS = 60000;
+const VERSION_TIMEOUT_MS = 10000;
+
 // The official HangUpInviteDialog exposes four help slots, independently of daily tasks.
 const HANG_UP_HELP_SLOTS = 4;
 
@@ -150,8 +160,106 @@ export async function fillHangUpTime({
 }
 
 /**
+ * Clear cached configuration and version mapping.
+ * 仅用于测试，生产环境不需要调用（切账号不会串配置，缓存按版本区分）。
+ * @internal
+ */
+export function resetDailyTaskConfigCache() {
+  configsByVersion.clear();
+  resolvedVersionByServer.clear();
+  publishedVersion = null;
+}
+
+/** @param {string} value 候选版本号 @returns {boolean} 是否可作为 URL 路径片段 */
+function isSafeVersion(value) {
+  return typeof value === "string" && /^[\w-]+$/.test(value);
+}
+
+/** @param {number} ms 超时毫秒 @returns {AbortSignal|undefined} 超时信号（老环境可能不支持） */
+function timeoutSignal(ms) {
+  return typeof AbortSignal?.timeout === "function"
+    ? AbortSignal.timeout(ms)
+    : undefined;
+}
+
+/**
+ * 只缓存一个版本的配置，避免旧版本长期占内存。
+ * @param {string} keep 需要保留的版本
+ */
+function pruneConfigs(keep) {
+  for (const key of configsByVersion.keys()) {
+    if (key !== keep) configsByVersion.delete(key);
+  }
+}
+
+/**
+ * Read and validate one config version, merging concurrent requests.
+ * @param {string} version Config directory version.
+ * @param {Function} fetchConfig Fetch implementation.
+ * @returns {Promise<object>} Validated config tagged with its version.
+ */
+async function loadConfigForVersion(version, fetchConfig) {
+  const cached = configsByVersion.get(version);
+  if (cached) return cached;
+
+  const loading = (async () => {
+    const response = await fetchConfig(
+      `${DATA_CDN}/data/${version}/config.json`,
+      {
+        signal: timeoutSignal(CONFIG_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) {
+      const error = new Error(
+        `官方任务配置读取失败（HTTP ${response.status}，版本 ${version}）`,
+      );
+      error.configUnavailable = true;
+      error.httpStatus = response.status;
+      error.configVersion = version;
+      throw error;
+    }
+    const config = validateDailyTaskConfig(await response.json());
+    return { ...config, configVersion: version };
+  })();
+
+  configsByVersion.set(version, loading);
+  loading.catch(() => {
+    if (configsByVersion.get(version) === loading)
+      configsByVersion.delete(version);
+  });
+  return loading;
+}
+
+/**
+ * Read the version the official client itself is using.
+ * 服务器返回的 dataBundleVer 可能已被官方从 CDN 清理，此时用这里兜底。
+ * @param {Function} fetchConfig Fetch implementation.
+ * @returns {Promise<string|null>} Published data version, or null.
+ */
+async function fetchPublishedVersion(fetchConfig) {
+  if (publishedVersion) return publishedVersion;
+  try {
+    const response = await fetchConfig(`${DATA_CDN}/data/version.json`, {
+      signal: timeoutSignal(VERSION_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (isSafeVersion(data?.version)) {
+      publishedVersion = data.version;
+      return publishedVersion;
+    }
+  } catch {
+    /* 版本清单拿不到就继续用服务器版本或缓存 */
+  }
+  return null;
+}
+
+/**
  * Load task targets from the official data version returned by the game server.
  * Only immutable configuration is cached; role progress is never cached here.
+ *
+ * 顺序：上次成功读取的版本 -> 服务器 dataBundleVer -> 官方 data/version.json。
+ * 官方会定期删除旧数据目录，服务器字段又可能滞后，只用服务器版本会 404。
  * @param {object} tokenStore Live command transport.
  * @param {string} tokenId Selected account identity.
  * @param {Function} [fetchConfig] Fetch implementation for the official CDN.
@@ -168,29 +276,41 @@ export async function loadDailyTaskConfig(
     {},
     15000,
   );
-  const version = response?.dataBundleVer;
-  if (typeof version !== "string" || !/^[\w-]+$/.test(version))
+  const serverVersion = response?.dataBundleVer;
+  if (!isSafeVersion(serverVersion))
     throw new Error("服务器未提供有效的任务配置版本");
-  if (!configsByVersion.has(version)) {
-    const loading = (async () => {
-      const response = await fetchConfig(
-        `https://xxz-xyzw-res.hortorgames.com/data/${version}/config.json`,
-        { signal: AbortSignal.timeout(30000) },
-      );
-      if (!response.ok) throw new Error("官方任务配置读取失败");
-      const config = await response.json();
-      return validateDailyTaskConfig(config);
-    })();
-    configsByVersion.set(version, loading);
-    loading.catch(() => {
-      if (configsByVersion.get(version) === loading)
-        configsByVersion.delete(version);
-    });
-    for (const key of configsByVersion.keys()) {
-      if (key !== version) configsByVersion.delete(key);
+
+  // 先试服务器给的版本（正常路径），失败再用上次成功的版本（命中缓存，不重复下载），
+  // 最后才去问官方 data/version.json。顺序反了会一直停在旧配置上。
+  const candidates = [serverVersion];
+  const resolved = resolvedVersionByServer.get(serverVersion);
+  if (resolved && !candidates.includes(resolved)) candidates.push(resolved);
+
+  let lastError = null;
+  for (const version of candidates) {
+    try {
+      const config = await loadConfigForVersion(version, fetchConfig);
+      resolvedVersionByServer.set(serverVersion, version);
+      pruneConfigs(version);
+      return config;
+    } catch (error) {
+      lastError = error;
     }
   }
-  return configsByVersion.get(version);
+
+  const published = await fetchPublishedVersion(fetchConfig);
+  if (published && !candidates.includes(published)) {
+    try {
+      const config = await loadConfigForVersion(published, fetchConfig);
+      resolvedVersionByServer.set(serverVersion, published);
+      pruneConfigs(published);
+      return config;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error(`官方任务配置读取失败（版本 ${serverVersion}）`);
 }
 
 /**

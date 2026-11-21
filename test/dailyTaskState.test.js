@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import {
   getClaimablePointRewards,
   getDailyTaskStates,
   loadDailyTaskConfig,
+  resetDailyTaskConfigCache,
   validateDailyTaskConfig,
 } from "../src/utils/dailyTaskState.js";
+
+// 配置与版本映射是模块级缓存，测试之间需要清空，避免互相命中
+beforeEach(() => resetDailyTaskConfigCache());
 
 function officialConfig() {
   return {
@@ -134,22 +138,30 @@ test("config version is verified each run while immutable configuration requests
 });
 
 test("failed config reads can be retried and unsafe versions are rejected", async () => {
-  let attempt = 0;
+  let configAttempt = 0;
   const store = {
     async sendMessageWithPromise() {
       return { dataBundleVer: "test-config-retry" };
     },
   };
-  const fetchConfig = async () => ({
-    ok: ++attempt > 1,
-    json: async () => officialConfig(),
-  });
+  const fetchConfig = async (url) => {
+    // 版本清单也失败，确保这一次整体以「读取失败」结束
+    if (url.endsWith("/data/version.json"))
+      return { ok: false, status: 404, json: async () => ({}) };
+    configAttempt++;
+    const ok = configAttempt > 1;
+    return {
+      ok,
+      status: ok ? 200 : 404,
+      json: async () => officialConfig(),
+    };
+  };
   await assert.rejects(
     loadDailyTaskConfig(store, "a", fetchConfig),
     /读取失败/,
   );
   await loadDailyTaskConfig(store, "a", fetchConfig);
-  assert.equal(attempt, 2);
+  assert.equal(configAttempt, 2);
   await assert.rejects(
     loadDailyTaskConfig(
       {
@@ -161,6 +173,65 @@ test("failed config reads can be retried and unsafe versions are rejected", asyn
       fetchConfig,
     ),
     /有效/,
+  );
+});
+
+test("服务器版本目录被官方清理时回退到 data/version.json 的版本", async () => {
+  const store = {
+    async sendMessageWithPromise() {
+      return { dataBundleVer: "retired-config-a" };
+    },
+  };
+  const seen = [];
+  const fetchConfig = async (url) => {
+    seen.push(url);
+    if (url.endsWith("/data/version.json"))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ version: "published-config-a" }),
+      };
+    if (url.includes("/data/retired-config-a/"))
+      return { ok: false, status: 404, json: async () => ({}) };
+    if (url.includes("/data/published-config-a/"))
+      return { ok: true, status: 200, json: async () => officialConfig() };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  const config = await loadDailyTaskConfig(store, "a", fetchConfig);
+  assert.equal(config.configVersion, "published-config-a");
+  assert.equal(config.tasks.length, 3);
+  assert.ok(seen.some((url) => url.includes("/data/retired-config-a/")));
+  assert.ok(seen.some((url) => url.endsWith("/data/version.json")));
+
+  // 第二次仍先试服务器版本（一次 404），随后命中已解析版本，不再重复下载 config.json
+  const readsBefore = seen.filter((url) => url.includes("/config.json")).length;
+  const again = await loadDailyTaskConfig(store, "a", fetchConfig);
+  assert.equal(again, config);
+  assert.equal(
+    seen.filter((url) => url.includes("/config.json")).length,
+    readsBefore + 1,
+  );
+});
+
+test("所有候选都不可用时，错误信息带上版本号与状态码", async () => {
+  const store = {
+    async sendMessageWithPromise() {
+      return { dataBundleVer: "all-broken-a" };
+    },
+  };
+  const fetchConfig = async (url) => {
+    if (url.endsWith("/data/version.json"))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ version: "also-broken-a" }),
+      };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  await assert.rejects(
+    loadDailyTaskConfig(store, "a", fetchConfig),
+    /HTTP 404，版本 also-broken-a/,
   );
 });
 
